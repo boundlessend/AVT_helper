@@ -5,13 +5,14 @@ enum DocxExporter {
         subtitle: ImportedSubtitle,
         outputFolder: String,
         roleHighlights: [String: WordHighlightColor] = [:],
+        voiceSummaries: [VoiceRoleSummary] = [],
         fileSuffix: String = ""
     ) throws -> String {
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
         let outputPath: String = URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase)\(fileSuffix).docx").path
         let tempRoot: URL = FileManager.default.temporaryDirectory.appendingPathComponent("AVT_helper_docx_\(UUID().uuidString)")
         try createStructure(root: tempRoot)
-        try writeDocxFiles(root: tempRoot, subtitle: subtitle, roleHighlights: roleHighlights)
+        try writeDocxFiles(root: tempRoot, subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
         try zipDocx(root: tempRoot, outputPath: outputPath)
         try? FileManager.default.removeItem(at: tempRoot)
         return outputPath
@@ -23,13 +24,18 @@ enum DocxExporter {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("docProps"), withIntermediateDirectories: true)
     }
 
-    private static func writeDocxFiles(root: URL, subtitle: ImportedSubtitle, roleHighlights: [String: WordHighlightColor]) throws {
+    private static func writeDocxFiles(
+        root: URL,
+        subtitle: ImportedSubtitle,
+        roleHighlights: [String: WordHighlightColor],
+        voiceSummaries: [VoiceRoleSummary]
+    ) throws {
         try contentTypes().write(to: root.appendingPathComponent("[Content_Types].xml"), atomically: true, encoding: .utf8)
         try rootRels().write(to: root.appendingPathComponent("_rels/.rels"), atomically: true, encoding: .utf8)
         try documentRels().write(to: root.appendingPathComponent("word/_rels/document.xml.rels"), atomically: true, encoding: .utf8)
         try appProps().write(to: root.appendingPathComponent("docProps/app.xml"), atomically: true, encoding: .utf8)
         try coreProps().write(to: root.appendingPathComponent("docProps/core.xml"), atomically: true, encoding: .utf8)
-        try documentXml(subtitle: subtitle, roleHighlights: roleHighlights)
+        try documentXml(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
             .write(to: root.appendingPathComponent("word/document.xml"), atomically: true, encoding: .utf8)
         try stylesXml().write(to: root.appendingPathComponent("word/styles.xml"), atomically: true, encoding: .utf8)
     }
@@ -49,7 +55,11 @@ enum DocxExporter {
         }
     }
 
-    private static func documentXml(subtitle: ImportedSubtitle, roleHighlights: [String: WordHighlightColor]) -> String {
+    private static func documentXml(
+        subtitle: ImportedSubtitle,
+        roleHighlights: [String: WordHighlightColor],
+        voiceSummaries: [VoiceRoleSummary]
+    ) -> String {
         let rows: String = subtitle.lines.map { line in
             let lineHighlight: WordHighlightColor? = highlightForRoles(line.effectiveRoles, roleHighlights: roleHighlights)
             return tableRow(
@@ -61,6 +71,9 @@ enum DocxExporter {
         }.joined()
 
         let rolesLine: String = subtitle.allRoles.joined(separator: ", ")
+        let voiceSummaryXml: String = voiceSummaries.map { summary in
+            voiceSummaryParagraph(summary)
+        }.joined()
         let statistics: String = roleStatistics(subtitle: subtitle)
         return """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -68,6 +81,7 @@ enum DocxExporter {
           <w:body>
             \(paragraph(subtitle.baseName, bold: true, center: true, fontSize: "26", highlight: nil))
             \(paragraph(rolesLine, bold: false, center: false, fontSize: "22", highlight: nil))
+            \(voiceSummaryXml)
             <w:tbl>
               <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr>
               <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1800"/><w:gridCol w:w="8200"/></w:tblGrid>
@@ -80,6 +94,15 @@ enum DocxExporter {
             <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="850"/></w:sectPr>
           </w:body>
         </w:document>
+        """
+    }
+
+    private static func voiceSummaryParagraph(_ summary: VoiceRoleSummary) -> String {
+        let voiceTitle: String = TextTools.xmlEscape("Голос \(summary.voice.id)")
+        let roleList: String = summary.roles.joined(separator: ", ")
+        let tail: String = TextTools.xmlEscape(" \(summary.voice.gender.shortTitle) - \(roleList)")
+        return """
+        <w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:highlight w:val="\(summary.voice.color.wordValue)"/></w:rPr><w:t xml:space="preserve">\(voiceTitle)</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">\(tail)</w:t></w:r></w:p>
         """
     }
 

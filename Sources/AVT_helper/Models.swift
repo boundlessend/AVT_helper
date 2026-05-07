@@ -99,6 +99,15 @@ enum VoiceGender: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var shortTitle: String {
+        switch self {
+        case .male:
+            return "м"
+        case .female:
+            return "ж"
+        }
+    }
+
     func title(_ language: AppLanguage) -> String {
         switch (self, language) {
         case (.male, .ru):
@@ -200,4 +209,9 @@ struct RoleGenderSetting: Identifiable {
 struct RoleAssignmentResult {
     let roleToVoice: [String: Int]
     let roleToHighlight: [String: WordHighlightColor]
+}
+
+struct VoiceRoleSummary {
+    let voice: VoiceConfig
+    let roles: [String]
 }

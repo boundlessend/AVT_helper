@@ -150,10 +150,12 @@ struct RoleAssignmentView: View {
                 voices: voices,
                 roleSettings: roleSettings
             )
+            let voiceSummaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result)
             let path: String = try DocxExporter.export(
                 subtitle: subtitle,
                 outputFolder: outputFolder,
                 roleHighlights: result.roleToHighlight,
+                voiceSummaries: voiceSummaries,
                 fileSuffix: " [Разролёвка]"
             )
             assignmentSummary = buildSummary(result: result)
@@ -161,6 +163,21 @@ struct RoleAssignmentView: View {
             dismiss()
         } catch {
             onError(error.localizedDescription)
+        }
+    }
+
+    private func buildVoiceSummaries(result: RoleAssignmentResult) -> [VoiceRoleSummary] {
+        voices.compactMap { voice in
+            let roles: [String] = result.roleToVoice
+                .filter { item in item.value == voice.id }
+                .map { item in item.key }
+                .sorted { left, right in
+                    left.localizedCaseInsensitiveCompare(right) == .orderedAscending
+                }
+            if roles.isEmpty {
+                return nil
+            }
+            return VoiceRoleSummary(voice: voice, roles: roles)
         }
     }
 
