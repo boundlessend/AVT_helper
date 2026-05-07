@@ -7,15 +7,33 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build macOS app
     runs-on: macos-13
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
       - name: Swift version
         run: swift --version
+
+      - name: Resolve dependencies
+        run: swift package resolve
 
       - name: Build
         run: swift build -c release
@@ -25,3 +43,9 @@ jobs:
 
       - name: Validate Info.plist
         run: plutil -lint .build/AVT_helper.app/Contents/Info.plist
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AVT_helper.app
+          path: .build/AVT_helper.app
