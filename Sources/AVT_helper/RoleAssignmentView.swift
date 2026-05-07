@@ -1,0 +1,199 @@
+import SwiftUI
+
+struct RoleAssignmentView: View {
+    let subtitle: ImportedSubtitle
+    let outputFolder: String
+    let language: AppLanguage
+    let onComplete: (String) -> Void
+    let onError: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var voices: [VoiceConfig] = [
+        VoiceConfig(id: 1, gender: .male, color: .yellow),
+        VoiceConfig(id: 2, gender: .female, color: .green)
+    ]
+    @State private var voiceCount: Int = 2
+    @State private var roleSettings: [RoleGenderSetting] = []
+    @State private var assignmentSummary: String = ""
+
+    private var roleCounts: [String: Int] {
+        RoleAssignmentService.roleReplicaCounts(subtitle: subtitle)
+    }
+
+    private func t(_ key: String) -> String {
+        L.text(key, language)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(t("roleAssignment"))
+                    .font(.title2.weight(.bold))
+                Spacer()
+                Button(t("close")) {
+                    dismiss()
+                }
+            }
+
+            Stepper("\(t("voiceCount")): \(voiceCount)", value: $voiceCount, in: 1...12)
+                .onChange(of: voiceCount) { newValue in
+                    adjustVoices(count: newValue)
+                }
+
+            voiceTable
+
+            Text(t("roles"))
+                .font(.headline)
+            roleTable
+
+            if !assignmentSummary.isEmpty {
+                Text(assignmentSummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button(t("assignRoles")) {
+                    assignRoles()
+                }
+                .keyboardShortcut(.return)
+            }
+        }
+        .padding(18)
+        .onAppear {
+            if roleSettings.isEmpty {
+                roleSettings = subtitle.allRoles.map { role in
+                    RoleGenderSetting(role: role, gender: .male)
+                }
+            }
+        }
+    }
+
+    private var voiceTable: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("voices"))
+                .font(.headline)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    Text(t("voice")).fontWeight(.semibold)
+                    Text(t("highlightColor")).fontWeight(.semibold)
+                    Text(t("gender")).fontWeight(.semibold)
+                }
+                ForEach($voices) { $voice in
+                    GridRow {
+                        Text("\(t("voice")) \(voice.id)")
+                        Picker("", selection: $voice.color) {
+                            ForEach(WordHighlightColor.allCases) { color in
+                                HStack {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(color.previewColor)
+                                        .frame(width: 18, height: 18)
+                                    Text(color.title(language))
+                                }
+                                .tag(color)
+                            }
+                        }
+                        .frame(width: 210)
+                        Picker("", selection: $voice.gender) {
+                            ForEach(VoiceGender.allCases) { gender in
+                                Text(gender.title(language)).tag(gender)
+                            }
+                        }
+                        .frame(width: 150)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var roleTable: some View {
+        List($roleSettings) { $setting in
+            HStack {
+                Text(setting.role)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(roleCounts[setting.role, default: 0]) \(t("lineCountSuffix"))")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 80, alignment: .trailing)
+                Picker("", selection: $setting.gender) {
+                    ForEach(VoiceGender.allCases) { gender in
+                        Text(gender.title(language)).tag(gender)
+                    }
+                }
+                .frame(width: 150)
+            }
+        }
+        .frame(minHeight: 240)
+    }
+
+    private func adjustVoices(count: Int) {
+        if voices.count > count {
+            voices = Array(voices.prefix(count))
+            return
+        }
+
+        while voices.count < count {
+            let nextId: Int = (voices.map { voice in voice.id }.max() ?? 0) + 1
+            let gender: VoiceGender = nextId % 2 == 0 ? .female : .male
+            let color: WordHighlightColor = WordHighlightColor.allCases[(nextId - 1) % WordHighlightColor.allCases.count]
+            voices.append(VoiceConfig(id: nextId, gender: gender, color: color))
+        }
+    }
+
+    private func assignRoles() {
+        do {
+            let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
+                subtitle: subtitle,
+                voices: voices,
+                roleSettings: roleSettings
+            )
+            let path: String = try DocxExporter.export(
+                subtitle: subtitle,
+                outputFolder: outputFolder,
+                roleHighlights: result.roleToHighlight,
+                fileSuffix: " [Разролёвка]"
+            )
+            assignmentSummary = buildSummary(result: result)
+            onComplete(path)
+            dismiss()
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+
+    private func buildSummary(result: RoleAssignmentResult) -> String {
+        let counts: [String: Int] = roleCounts
+        let loadByVoice: [Int: Int] = result.roleToVoice.reduce(into: [Int: Int]()) { result, item in
+            result[item.value, default: 0] += counts[item.key, default: 0]
+        }
+        return voices.map { voice in
+            "\(t("voice")) \(voice.id): \(loadByVoice[voice.id, default: 0]) \(t("lineCountSuffix"))"
+        }.joined(separator: "  ")
+    }
+}
+
+private extension WordHighlightColor {
+    var previewColor: Color {
+        switch self {
+        case .yellow:
+            return .yellow
+        case .green:
+            return .green
+        case .cyan:
+            return .cyan
+        case .magenta:
+            return .pink
+        case .blue:
+            return .blue
+        case .red:
+            return .red
+        case .darkYellow:
+            return Color(red: 0.72, green: 0.58, blue: 0.05)
+        case .lightGray:
+            return .gray
+        }
+    }
+}

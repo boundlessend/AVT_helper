@@ -1,0 +1,17 @@
+.DS_Store
+.cgcignore
+.build/
+.swiftpm/
+DerivedData/
+
+*.app/
+*.dSYM/
+*.xcarchive/
+
+*.user
+*.suo
+*.swp
+
+.vscode/
+.vs/
+.idea/

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Build app bundle
+        run: ./scripts/build_app.sh
+
+      - name: Validate Info.plist
+        run: plutil -lint .build/AVT_helper.app/Contents/Info.plist
