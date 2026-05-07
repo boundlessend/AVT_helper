@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 @main
 struct AVTHelperApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -34,6 +36,12 @@ struct AVTHelperApp: App {
         }
         .defaultSize(width: 380, height: 190)
         .windowResizability(.contentSize)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 }
 
