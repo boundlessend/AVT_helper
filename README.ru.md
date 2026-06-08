@@ -1,13 +1,23 @@
-![иконка AVT_helper](Assets/AVT_helper_icon.png)
+<p align="center">
+  <img src="Assets/AVT_helper_icon.png" alt="иконка приложения AVT_helper" width="128">
+</p>
 
-Язык: [EN](README.md) | RU | [FR](README.fr.md)
+<h1 align="center">AVT_helper</h1>
 
-# AVT_helper
+<p align="center">
+  <strong>Язык:</strong> <a href="README.md">EN</a> | RU | <a href="README.fr.md">FR</a>
+</p>
 
-[![CI](https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml/badge.svg)](https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml)
-[![Release DMG](https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml/badge.svg)](https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml)
-![macOS](https://img.shields.io/badge/macOS-13%2B-blue)
-![License](https://img.shields.io/badge/License-BSD--3--Clause-green)
+<p align="center">
+  <strong>конвертация субтитров и DOCX-таблицы ролей для macOS</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml"><img alt="Release DMG" src="https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml/badge.svg"></a>
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-111827">
+  <img alt="License" src="https://img.shields.io/badge/license-BSD--3--Clause-2563eb">
+</p>
 
 `AVT_helper` — нативное macOS-приложение для конвертации субтитров и создания DOCX-таблиц с репликами.
 
