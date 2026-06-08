@@ -30,7 +30,6 @@ struct SettingsWindow: View {
     var body: some View {
         SettingsView(languageRaw: $appLanguageRaw) {
             AppCache.resetTemporaryFiles()
-            appLanguageRaw = AppLanguage.ru.rawValue
         }
     }
 }

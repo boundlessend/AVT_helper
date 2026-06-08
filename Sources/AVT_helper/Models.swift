@@ -16,13 +16,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-enum SubtitleFormat: String, CaseIterable, Identifiable {
-    case ass = "ASS"
-    case srt = "SRT"
-    case vtt = "VTT"
-    case docx = "DOCX"
-
-    var id: String { rawValue }
+enum AppLimits {
+    /// максимальный размер импортируемого файла субтитров
+    static let maxSubtitleFileBytes: UInt64 = 50 * 1024 * 1024
 }
 
 enum SubtitleSourceType: String {
@@ -60,7 +56,6 @@ struct SubtitleLine: Identifiable, Hashable {
 }
 
 struct ImportedSubtitle {
-    let sourcePath: String
     let baseName: String
     let sourceType: SubtitleSourceType
     let lines: [SubtitleLine]

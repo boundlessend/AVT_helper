@@ -63,10 +63,33 @@ struct RoleAssignmentView: View {
         .padding(18)
         .onAppear {
             if roleSettings.isEmpty {
+                let hints: [String: VoiceGender] = roleGenderHints()
                 roleSettings = subtitle.allRoles.map { role in
-                    RoleGenderSetting(role: role, gender: .male)
+                    RoleGenderSetting(role: role, gender: hints[role] ?? .male)
                 }
             }
+        }
+    }
+
+    private func roleGenderHints() -> [String: VoiceGender] {
+        subtitle.lines.reduce(into: [String: VoiceGender]()) { result, line in
+            guard let gender: VoiceGender = genderHint(sex: line.sex) else {
+                return
+            }
+            for role in line.effectiveRoles where result[role] == nil {
+                result[role] = gender
+            }
+        }
+    }
+
+    private func genderHint(sex: String) -> VoiceGender? {
+        switch sex {
+        case "МУЖ":
+            return .male
+        case "ЖЕН":
+            return .female
+        default:
+            return nil
         }
     }
 

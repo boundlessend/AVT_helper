@@ -49,7 +49,6 @@ enum L {
         "ready": [.ru: "Готово", .en: "Ready"],
         "settings.language": [.ru: "Язык приложения", .en: "App language"],
         "settings.resetCache": [.ru: "Сбросить кеш приложения", .en: "Reset app cache"],
-        "settings.cacheReset": [.ru: "Кеш приложения сброшен.", .en: "App cache has been reset."],
         "settings.close": [.ru: "Закрыть", .en: "Close"],
         "qa.q1": [.ru: "Какие форматы можно импортировать?", .en: "Which formats can I import?"],
         "qa.a1": [.ru: "ASS, SSA, SRT, VTT и SRP.", .en: "ASS, SSA, SRT, VTT, and SRP."],

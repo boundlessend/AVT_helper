@@ -9,6 +9,7 @@ enum RoleAssignmentService {
         }
     }
 
+    /// распределяет роли по голосам с учётом пола и текущей нагрузки
     static func assignRoles(
         subtitle: ImportedSubtitle,
         voices: [VoiceConfig],

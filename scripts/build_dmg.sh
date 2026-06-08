@@ -5,21 +5,23 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="AVT_helper"
 BUILD_DIR="${ROOT_DIR}/.build"
 APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
-DMG_ROOT="${BUILD_DIR}/dmg-root"
 DMG_PATH="${BUILD_DIR}/AVT_helper.dmg"
 
 "${ROOT_DIR}/scripts/build_app.sh"
 
-rm -rf "${DMG_ROOT}" "${DMG_PATH}"
-mkdir -p "${DMG_ROOT}"
-cp -R "${APP_DIR}" "${DMG_ROOT}/${APP_NAME}.app"
-ln -s /Applications "${DMG_ROOT}/Applications"
+if ! command -v create-dmg >/dev/null 2>&1; then
+  echo "create-dmg is required. Install it with: brew install create-dmg" >&2
+  exit 1
+fi
 
-hdiutil create \
-  -volname "${APP_NAME}" \
-  -srcfolder "${DMG_ROOT}" \
-  -ov \
-  -format UDZO \
-  "${DMG_PATH}"
+rm -f "${DMG_PATH}" "${BUILD_DIR}/${APP_NAME}-"*.dmg
+
+create-dmg \
+  --overwrite \
+  --no-version-in-filename \
+  --no-code-sign \
+  --dmg-title "${APP_NAME}" \
+  "${APP_DIR}" \
+  "${BUILD_DIR}"
 
 echo "Created ${DMG_PATH}"

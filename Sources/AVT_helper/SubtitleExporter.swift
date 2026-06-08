@@ -1,6 +1,7 @@
 import Foundation
 
 enum SubtitleExporter {
+    /// экспортирует субтитры во все выбранные пользователем форматы
     static func export(subtitle: ImportedSubtitle, outputFolder: String, settings: ExportSettings) throws -> [String] {
         try FileManager.default.createDirectory(atPath: outputFolder, withIntermediateDirectories: true)
         var created: [String] = []

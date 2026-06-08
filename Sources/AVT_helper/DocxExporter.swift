@@ -1,6 +1,7 @@
 import Foundation
 
 enum DocxExporter {
+    /// создаёт docx с таблицей реплик и опциональной разролёвкой
     static func export(
         subtitle: ImportedSubtitle,
         outputFolder: String,
@@ -11,10 +12,12 @@ enum DocxExporter {
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
         let outputPath: String = URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase)\(fileSuffix).docx").path
         let tempRoot: URL = FileManager.default.temporaryDirectory.appendingPathComponent("AVT_helper_docx_\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
         try createStructure(root: tempRoot)
         try writeDocxFiles(root: tempRoot, subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
         try zipDocx(root: tempRoot, outputPath: outputPath)
-        try? FileManager.default.removeItem(at: tempRoot)
         return outputPath
     }
 

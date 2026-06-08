@@ -44,10 +44,6 @@ enum TimeTools {
         return String(format: "%02d:%02d:%02d.%03d", parts.hours, parts.minutes, parts.seconds, parts.milliseconds)
     }
 
-    static func formatDuration(_ input: TimeInterval) -> String {
-        formatSrt(max(0, input))
-    }
-
     static func formatClockSeconds(_ input: TimeInterval) -> String {
         let parts: TimeParts = splitTime(input)
         if parts.hours > 0 {

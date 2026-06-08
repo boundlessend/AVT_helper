@@ -5,12 +5,19 @@
 DerivedData/
 
 *.app/
+*.dmg
 *.dSYM/
 *.xcarchive/
+*.xcuserstate
 
 *.user
 *.suo
 *.swp
+
+.env
+*.pem
+*.p12
+*.mobileprovision
 
 .vscode/
 .vs/

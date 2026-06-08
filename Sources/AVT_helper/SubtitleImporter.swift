@@ -1,9 +1,11 @@
 import Foundation
 
 enum SubtitleImporter {
+    /// импортирует поддерживаемый файл субтитров и нормализует реплики по времени
     static func importFile(path: String) throws -> ImportedSubtitle {
         let url: URL = URL(fileURLWithPath: path)
         let sourceType: SubtitleSourceType = try detect(path: path)
+        try validateFile(url: url)
         let text: String = try String(contentsOf: url, encoding: .utf8)
         let lines: [SubtitleLine]
 
@@ -19,7 +21,6 @@ enum SubtitleImporter {
         }
 
         return ImportedSubtitle(
-            sourcePath: path,
             baseName: url.deletingPathExtension().lastPathComponent,
             sourceType: sourceType,
             lines: lines.sorted { left, right in
@@ -46,6 +47,17 @@ enum SubtitleImporter {
             return .srp
         default:
             throw SubtitleError.unsupportedFormat(path)
+        }
+    }
+
+    private static func validateFile(url: URL) throws {
+        let values: URLResourceValues = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        if values.isRegularFile != true {
+            throw SubtitleError.importFailed("Источник не является обычным файлом: \(url.path)")
+        }
+        let fileSize: UInt64 = UInt64(values.fileSize ?? 0)
+        if fileSize > AppLimits.maxSubtitleFileBytes {
+            throw SubtitleError.importFailed("Файл слишком большой: \(fileSize) байт. Максимум: \(AppLimits.maxSubtitleFileBytes) байт.")
         }
     }
 
