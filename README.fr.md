@@ -13,10 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml"><img alt="Release DMG" src="https://github.com/boundlessend/AVT_helper/actions/workflows/release.yml/badge.svg"></a>
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-13%2B-111827">
-  <img alt="License" src="https://img.shields.io/badge/license-BSD--3--Clause-2563eb">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-14%2B-111827">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9-f05138">
+  <img alt="licence" src="https://img.shields.io/badge/license-BSD--3--Clause-2563eb">
 </p>
 
 `AVT_helper` est une application macOS native pour convertir des sous-titres et créer des tableaux DOCX de dialogues.
