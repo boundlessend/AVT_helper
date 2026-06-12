@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/AVT_helper_icon.png" alt="icône de l’application AVT_helper" width="128">
+  <img src="Assets/AVT_helper_readme_icon.png" alt="icône de l’application AVT_helper" width="128">
 </p>
 
 <h1 align="center">AVT_helper</h1>
