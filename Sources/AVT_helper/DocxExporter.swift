@@ -54,7 +54,7 @@ enum DocxExporter {
         try process.run()
         process.waitUntilExit()
         if process.terminationStatus != 0 {
-            throw SubtitleError.exportFailed("zip завершился с кодом \(process.terminationStatus)")
+            throw SubtitleError.exportFailed(L.format("error.zipFailed", AppLanguage.current, ["code": String(process.terminationStatus)]))
         }
     }
 

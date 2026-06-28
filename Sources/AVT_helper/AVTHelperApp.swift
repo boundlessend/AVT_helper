@@ -305,7 +305,7 @@ struct ContentView: View {
     private func runExport() {
         do {
             guard let subtitle: ImportedSubtitle = importedSubtitle else {
-                throw SubtitleError.exportFailed("Сначала выберите исходный файл.")
+                throw SubtitleError.exportFailed(L.text("error.noInputSelected", language))
             }
             let settings: ExportSettings = ExportSettings(
                 exportAss: exportAss,

@@ -20,7 +20,7 @@ enum SubtitleExporter {
         }
 
         if created.isEmpty {
-            throw SubtitleError.exportFailed("Не выбран ни один формат экспорта.")
+            throw SubtitleError.exportFailed(L.text("error.noFormatSelected", AppLanguage.current))
         }
 
         return created

@@ -52,12 +52,16 @@ enum SubtitleImporter {
 
     private static func validateFile(url: URL) throws {
         let values: URLResourceValues = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        let language: AppLanguage = AppLanguage.current
         if values.isRegularFile != true {
-            throw SubtitleError.importFailed("Источник не является обычным файлом: \(url.path)")
+            throw SubtitleError.importFailed(L.format("error.notRegularFile", language, ["path": url.path]))
         }
         let fileSize: UInt64 = UInt64(values.fileSize ?? 0)
         if fileSize > AppLimits.maxSubtitleFileBytes {
-            throw SubtitleError.importFailed("Файл слишком большой: \(fileSize) байт. Максимум: \(AppLimits.maxSubtitleFileBytes) байт.")
+            throw SubtitleError.importFailed(L.format("error.fileTooLarge", language, [
+                "size": String(fileSize),
+                "max": String(AppLimits.maxSubtitleFileBytes)
+            ]))
         }
     }
 

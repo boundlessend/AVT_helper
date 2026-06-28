@@ -5,6 +5,13 @@ enum L {
         values[key]?[language] ?? values[key]?[.ru] ?? key
     }
 
+    /// подставляет значения в плейсхолдеры вида {token} локализованной строки
+    static func format(_ key: String, _ language: AppLanguage, _ replacements: [String: String]) -> String {
+        replacements.reduce(text(key, language)) { partial, pair in
+            partial.replacingOccurrences(of: "{\(pair.key)}", with: pair.value)
+        }
+    }
+
     private static let values: [String: [AppLanguage: String]] = [
         "app.description": [
             .ru: "AVT_helper — нативная macOS-утилита для конвертации субтитров, DOCX-таблиц и разролёвки.",
@@ -80,6 +87,24 @@ enum L {
         "gender": [.ru: "Пол", .en: "Gender"],
         "roles": [.ru: "Роли", .en: "Roles"],
         "lineCountSuffix": [.ru: "репл.", .en: "lines"],
-        "assignRoles": [.ru: "Назначить роли", .en: "Assign roles"]
+        "assignRoles": [.ru: "Назначить роли", .en: "Assign roles"],
+        "error.importPrefix": [.ru: "Ошибка импорта", .en: "Import error"],
+        "error.exportPrefix": [.ru: "Ошибка экспорта", .en: "Export error"],
+        "error.unsupportedFormat": [.ru: "Неподдерживаемый формат файла", .en: "Unsupported file format"],
+        "error.invalidTime": [.ru: "Не удалось разобрать таймкод", .en: "Could not parse timecode"],
+        "error.notRegularFile": [.ru: "Источник не является обычным файлом: {path}", .en: "Source is not a regular file: {path}"],
+        "error.fileTooLarge": [
+            .ru: "Файл слишком большой: {size} байт. Максимум: {max} байт.",
+            .en: "File is too large: {size} bytes. Maximum: {max} bytes."
+        ],
+        "error.noFormatSelected": [.ru: "Не выбран ни один формат экспорта.", .en: "No export format selected."],
+        "error.noInputSelected": [.ru: "Сначала выберите исходный файл.", .en: "Select a source file first."],
+        "error.noVoices": [.ru: "Добавьте хотя бы один голос для разролёвки.", .en: "Add at least one voice for role assignment."],
+        "error.noVoiceForGender": [
+            .ru: "Для ролей пола «{g}» не назначен ни один голос.",
+            .en: "No voice assigned for {g} roles."
+        ],
+        "error.cannotPickVoice": [.ru: "Не удалось выбрать голос для роли «{r}».", .en: "Could not pick a voice for role {r}."],
+        "error.zipFailed": [.ru: "zip завершился с кодом {code}", .en: "zip exited with code {code}"]
     ]
 }

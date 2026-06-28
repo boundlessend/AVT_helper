@@ -15,8 +15,9 @@ enum RoleAssignmentService {
         voices: [VoiceConfig],
         roleSettings: [RoleGenderSetting]
     ) throws -> RoleAssignmentResult {
+        let language: AppLanguage = AppLanguage.current
         if voices.isEmpty {
-            throw SubtitleError.exportFailed("Добавьте хотя бы один голос для разролёвки.")
+            throw SubtitleError.exportFailed(L.text("error.noVoices", language))
         }
 
         let counts: [String: Int] = roleReplicaCounts(subtitle: subtitle)
@@ -43,7 +44,7 @@ enum RoleAssignmentService {
 
             let matchingVoices: [VoiceConfig] = voices.filter { voice in voice.gender == gender }
             if matchingVoices.isEmpty {
-                throw SubtitleError.exportFailed("Для ролей пола «\(gender.rawValue)» не назначен ни один голос.")
+                throw SubtitleError.exportFailed(L.format("error.noVoiceForGender", language, ["g": gender.title(language)]))
             }
 
             for role in roles {
@@ -55,7 +56,7 @@ enum RoleAssignmentService {
                     }
                     return leftLoad < rightLoad
                 }) else {
-                    throw SubtitleError.exportFailed("Не удалось выбрать голос для роли «\(role.0)».")
+                    throw SubtitleError.exportFailed(L.format("error.cannotPickVoice", language, ["r": role.0]))
                 }
                 roleToVoice[role.0] = targetVoice.id
                 loadByVoice[targetVoice.id, default: 0] += role.1
