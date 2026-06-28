@@ -9,7 +9,7 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 EXECUTABLE_PATH="${ROOT_DIR}/.build/release/${APP_NAME}"
-VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//')"
+VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//' || true)"
 VERSION="${VERSION:-0.0.0}"
 
 cd "${ROOT_DIR}"
