@@ -6,7 +6,7 @@ enum SubtitleImporter {
         let url: URL = URL(fileURLWithPath: path)
         let sourceType: SubtitleSourceType = try detect(path: path)
         try validateFile(url: url)
-        let text: String = try String(contentsOf: url, encoding: .utf8)
+        let text: String = try readText(url: url)
         let lines: [SubtitleLine]
 
         switch sourceType {
@@ -64,6 +64,37 @@ enum SubtitleImporter {
             ]))
         }
     }
+
+    /// читает файл, подбирая кодировку: BOM, затем UTF-8, Windows-1251 и Latin-1
+    private static func readText(url: URL) throws -> String {
+        let data: Data = try Data(contentsOf: url)
+        if let bomDecoded: String = decodeByBom(data: data) {
+            return bomDecoded
+        }
+        let candidates: [String.Encoding] = [.utf8, windowsCyrillic, .isoLatin1]
+        for encoding in candidates {
+            if let text: String = String(data: data, encoding: encoding) {
+                return text
+            }
+        }
+        throw SubtitleError.importFailed(L.text("error.decodeFailed", AppLanguage.current))
+    }
+
+    private static func decodeByBom(data: Data) -> String? {
+        let bytes: [UInt8] = [UInt8](data.prefix(3))
+        if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
+            return String(data: data.dropFirst(3), encoding: .utf8)
+        }
+        if bytes.count >= 2, (bytes[0] == 0xFF && bytes[1] == 0xFE) || (bytes[0] == 0xFE && bytes[1] == 0xFF) {
+            return String(data: data, encoding: .utf16)
+        }
+        return nil
+    }
+
+    private static let windowsCyrillic: String.Encoding = {
+        let raw: UInt = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.windowsCyrillic.rawValue))
+        return String.Encoding(rawValue: raw)
+    }()
 
     private static func importAss(text: String) throws -> [SubtitleLine] {
         text.components(separatedBy: .newlines).compactMap { rawLine in
