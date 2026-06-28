@@ -5,23 +5,18 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="AVT_helper"
 BUILD_DIR="${ROOT_DIR}/.build"
 APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
-DMG_PATH="${BUILD_DIR}/AVT_helper.dmg"
+DMG_PATH="${BUILD_DIR}/${APP_NAME}.dmg"
+STAGE_DIR="${BUILD_DIR}/dmg_stage"
 
 "${ROOT_DIR}/scripts/build_app.sh"
 
-if ! command -v create-dmg >/dev/null 2>&1; then
-  echo "create-dmg is required. Install it with: brew install create-dmg" >&2
-  exit 1
-fi
+rm -rf "${STAGE_DIR}"
+mkdir -p "${STAGE_DIR}"
+cp -R "${APP_DIR}" "${STAGE_DIR}/${APP_NAME}.app"
+ln -s /Applications "${STAGE_DIR}/Applications"
 
-rm -f "${DMG_PATH}" "${BUILD_DIR}/${APP_NAME}-"*.dmg
-
-create-dmg \
-  --overwrite \
-  --no-version-in-filename \
-  --no-code-sign \
-  --dmg-title "${APP_NAME}" \
-  "${APP_DIR}" \
-  "${BUILD_DIR}"
+rm -f "${DMG_PATH}"
+hdiutil create -volname "${APP_NAME}" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}"
+rm -rf "${STAGE_DIR}"
 
 echo "Created ${DMG_PATH}"

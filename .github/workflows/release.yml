@@ -33,9 +33,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
-      - name: Install create-dmg
-        run: brew install create-dmg
-
       - name: Build DMG
         run: ./scripts/build_dmg.sh
 
