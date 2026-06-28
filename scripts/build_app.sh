@@ -43,7 +43,7 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>NSHumanReadableCopyright</key>
     <string>@boundlessend</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
   </dict>

@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "AVT_helper",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     products: [
         .executable(name: "AVT_helper", targets: ["AVT_helper"])
