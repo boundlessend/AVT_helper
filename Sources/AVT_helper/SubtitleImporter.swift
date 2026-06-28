@@ -164,7 +164,7 @@ enum SubtitleImporter {
             let cleaned: String = TextTools.removeLeadingBracketRoles(rawText)
             return cleaned.isEmpty ? rawText : cleaned
         }()
-        let role: String = roles.first ?? "Не назначено"
+        let role: String = roles.first ?? Roles.unassigned
         return SubtitleLine(id: UUID(), start: start, end: end, role: role, roles: roles.isEmpty ? [role] : roles, text: cleanText, style: "", effect: "", sex: "")
     }
 
@@ -178,7 +178,7 @@ enum SubtitleImporter {
     }
 
     private static func inferAssRole(name: String, style: String, effect: String) -> String {
-        if !name.isEmpty && name.caseInsensitiveCompare("Не назначено") != .orderedSame {
+        if !name.isEmpty && name.caseInsensitiveCompare(Roles.unassigned) != .orderedSame {
             return name
         }
         if !style.isEmpty && style.caseInsensitiveCompare("Default") != .orderedSame {
@@ -187,7 +187,7 @@ enum SubtitleImporter {
         if !effect.isEmpty {
             return effect
         }
-        return "Не назначено"
+        return Roles.unassigned
     }
 
     private static func childText(node: XMLNode, name: String) -> String {

@@ -9,6 +9,8 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 EXECUTABLE_PATH="${ROOT_DIR}/.build/release/${APP_NAME}"
+VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//')"
+VERSION="${VERSION:-0.0.0}"
 
 cd "${ROOT_DIR}"
 swift build -c release
@@ -35,9 +37,9 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleIconFile</key>
     <string>AVT_helper</string>
     <key>NSHumanReadableCopyright</key>

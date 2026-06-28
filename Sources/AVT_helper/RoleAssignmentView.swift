@@ -36,7 +36,7 @@ struct RoleAssignmentView: View {
             }
 
             Stepper("\(t("voiceCount")): \(voiceCount)", value: $voiceCount, in: 1...12)
-                .onChange(of: voiceCount) { newValue in
+                .onChange(of: voiceCount) { _, newValue in
                     adjustVoices(count: newValue)
                 }
 

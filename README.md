@@ -41,6 +41,8 @@ Then open the app again.
 
 ## Usage
 
+> The app launches in Russian by default. Switch the language in `Settings` -> `App language`.
+
 1. Click `Open subtitles` or drag a subtitle file into the input area.
 2. Choose the output folder.
 3. Select one or more export formats: `ASS`, `SRT`, `VTT`, or `DOCX`.

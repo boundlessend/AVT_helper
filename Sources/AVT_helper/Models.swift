@@ -4,6 +4,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case ru
     case en
 
+    /// ключ хранения выбранного языка в UserDefaults / @AppStorage
+    static let storageKey: String = "appLanguage"
+
     var id: String { rawValue }
 
     var title: String {
@@ -14,11 +17,36 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return "English"
         }
     }
+
+    /// разбирает сырое значение из настроек, падая в русский по умолчанию
+    static func resolve(_ raw: String?) -> AppLanguage {
+        guard let raw: String = raw, let language: AppLanguage = AppLanguage(rawValue: raw) else {
+            return .ru
+        }
+        return language
+    }
+
+    /// текущий язык приложения, прочитанный напрямую из настроек
+    static var current: AppLanguage {
+        resolve(UserDefaults.standard.string(forKey: storageKey))
+    }
 }
 
 enum AppLimits {
     /// максимальный размер импортируемого файла субтитров
     static let maxSubtitleFileBytes: UInt64 = 50 * 1024 * 1024
+}
+
+enum Roles {
+    /// каноническое имя для нераспознанной роли
+    static let unassigned: String = "Не назначено"
+}
+
+enum AppInfo {
+    /// версия приложения из Info.plist собранного бандла
+    static var shortVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    }
 }
 
 enum SubtitleSourceType: String {
@@ -51,7 +79,7 @@ struct SubtitleLine: Identifiable, Hashable {
                 result.append(normalized)
             }
         }
-        return uniqueRoles.isEmpty ? ["Не назначено"] : uniqueRoles
+        return uniqueRoles.isEmpty ? [Roles.unassigned] : uniqueRoles
     }
 }
 

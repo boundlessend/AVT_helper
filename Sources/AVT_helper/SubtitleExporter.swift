@@ -33,7 +33,7 @@ enum SubtitleExporter {
         var output: String = assHeader()
         for line in subtitle.lines {
             let style: String = line.style.isEmpty ? "Default" : line.style
-            let role: String = line.effectiveRoles.first ?? "Не назначено"
+            let role: String = line.effectiveRoles.first ?? Roles.unassigned
             output += "Dialogue: 0,\(TimeTools.formatAss(line.start)),\(TimeTools.formatAss(line.end)),\(style),\(role),0,0,0,,\(TextTools.escapeAssText(line.text))\n"
         }
         try output.write(toFile: path, atomically: true, encoding: .utf8)

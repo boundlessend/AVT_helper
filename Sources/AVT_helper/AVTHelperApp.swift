@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct ContentView: View {
-    @AppStorage("appLanguage") private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
     @State private var inputPath: String = ""
     @State private var outputFolder: String = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path ?? NSHomeDirectory()
     @State private var importedSubtitle: ImportedSubtitle?
@@ -66,7 +66,7 @@ struct ContentView: View {
     @State private var status: String = L.text("ready", .ru)
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: appLanguageRaw) ?? .ru
+        AppLanguage.resolve(appLanguageRaw)
     }
 
     private func t(_ key: String) -> String {
@@ -183,7 +183,7 @@ struct ContentView: View {
                 inputDropZone
                 Text(t("outputFolder"))
                     .foregroundStyle(.secondary)
-                TextField("", text: .constant(outputFolder))
+                TextField("", text: $outputFolder)
                     .textFieldStyle(.roundedBorder)
                 Text("\(t("source")): \(importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
                     .fontWeight(.semibold)
@@ -383,11 +383,11 @@ struct ContentView: View {
 }
 
 struct AppMenuCommands: Commands {
-    @AppStorage("appLanguage") private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
     @Environment(\.openWindow) private var openWindow
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: appLanguageRaw) ?? .ru
+        AppLanguage.resolve(appLanguageRaw)
     }
 
     var body: some Commands {

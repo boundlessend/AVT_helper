@@ -4,7 +4,7 @@ enum TextTools {
     static func cleanRoleName(_ input: String) -> String {
         let trimmed: String = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "Не назначено"
+            return Roles.unassigned
         }
 
         let replaced: String = trimmed
@@ -17,7 +17,7 @@ enum TextTools {
             .replacingOccurrences(of: "?", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return replaced.isEmpty ? "Не назначено" : replaced
+        return replaced.isEmpty ? Roles.unassigned : replaced
     }
 
     static func cleanAssText(_ input: String) -> String {

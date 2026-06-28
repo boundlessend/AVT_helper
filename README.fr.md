@@ -41,6 +41,8 @@ Ouvrez ensuite l’application à nouveau.
 
 ## Utilisation
 
+> L'application démarre en russe par défaut. Changez la langue dans `Réglages` -> `Langue de l'application`.
+
 1. Cliquez sur `Open subtitles` ou glissez un fichier de sous-titres dans la zone d’entrée.
 2. Choisissez le dossier de sortie.
 3. Sélectionnez un ou plusieurs formats : `ASS`, `SRT`, `VTT` ou `DOCX`.

@@ -120,14 +120,22 @@ enum DocxExporter {
     }
 
     private static func roleStatistics(subtitle: ImportedSubtitle) -> String {
-        let counts: [(String, Int)] = Dictionary(grouping: subtitle.lines.flatMap { line in line.effectiveRoles }, by: { role in role })
-            .map { role, values in (role, values.count) }
-            .sorted { left, right in
-                left.0.localizedCaseInsensitiveCompare(right.0) == .orderedAscending
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for role in subtitle.lines.flatMap({ line in line.effectiveRoles }) {
+            if let existing: String = order.first(where: { current in current.caseInsensitiveCompare(role) == .orderedSame }) {
+                counts[existing, default: 0] += 1
+            } else {
+                order.append(role)
+                counts[role] = 1
             }
-        return counts.map { role, count in
-            paragraph("\(role) - \(count)", bold: false, center: false, fontSize: "22", highlight: nil)
-        }.joined()
+        }
+        return order
+            .sorted { left, right in left.localizedCaseInsensitiveCompare(right) == .orderedAscending }
+            .map { role in
+                paragraph("\(role) - \(counts[role, default: 0])", bold: false, center: false, fontSize: "22", highlight: nil)
+            }
+            .joined()
     }
 
     private static func tableRow(timing: String, role: String, replica: String, roleHighlight: WordHighlightColor?) -> String {

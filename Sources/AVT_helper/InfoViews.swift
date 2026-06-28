@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct AboutWindow: View {
-    @AppStorage("appLanguage") private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: appLanguageRaw) ?? .ru
+        AppLanguage.resolve(appLanguageRaw)
     }
 
     var body: some View {
@@ -13,10 +13,10 @@ struct AboutWindow: View {
 }
 
 struct QAWindow: View {
-    @AppStorage("appLanguage") private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: appLanguageRaw) ?? .ru
+        AppLanguage.resolve(appLanguageRaw)
     }
 
     var body: some View {
@@ -25,7 +25,7 @@ struct QAWindow: View {
 }
 
 struct SettingsWindow: View {
-    @AppStorage("appLanguage") private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
 
     var body: some View {
         SettingsView(languageRaw: $appLanguageRaw) {
@@ -47,7 +47,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("AVT_helper")
                         .font(.title2.weight(.bold))
-                    Text(L.text("app.version", language))
+                    Text("\(L.text("version", language)) \(AppInfo.shortVersion)")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -119,7 +119,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRaw) ?? .ru
+        AppLanguage.resolve(languageRaw)
     }
 
     var body: some View {

@@ -15,7 +15,7 @@ enum L {
             .ru: "Конвертирует ASS, SSA, SRT, VTT и SRP в популярные форматы субтитров и DOCX с ролями, таймингами, репликами и статистикой.",
             .en: "Converts ASS, SSA, SRT, VTT, and SRP into popular subtitle formats and DOCX files with roles, timings, dialogue, and statistics."
         ],
-        "app.version": [.ru: "Версия 1.0.0", .en: "Version 1.0.0"],
+        "version": [.ru: "Версия", .en: "Version"],
         "qa": [.ru: "Q&A", .en: "Q&A"],
         "settings": [.ru: "Настройки", .en: "Settings"],
         "openSubtitles": [.ru: "Открыть субтитры", .en: "Open subtitles"],
