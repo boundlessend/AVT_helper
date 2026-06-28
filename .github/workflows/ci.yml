@@ -59,7 +59,7 @@ jobs:
         run: plutil -lint .build/AVT_helper.app/Contents/Info.plist
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: AVT_helper.app
           path: .build/AVT_helper.app
