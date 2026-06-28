@@ -45,12 +45,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// держит результат импорта и выполняет тяжёлые импорт/экспорт вне главного потока
+@MainActor
+final class ProcessingModel: ObservableObject {
+    @Published var importedSubtitle: ImportedSubtitle?
+    @Published var roles: [String] = []
+    @Published var status: String = L.text("ready", AppLanguage.current)
+    @Published var isWorking: Bool = false
+
+    private func t(_ key: String) -> String {
+        L.text(key, AppLanguage.current)
+    }
+
+    func log(_ message: String) {
+        status = message
+    }
+
+    func importFile(path: String) async {
+        isWorking = true
+        do {
+            let imported: ImportedSubtitle = try await Task.detached(priority: .userInitiated) {
+                try SubtitleImporter.importFile(path: path)
+            }.value
+            importedSubtitle = imported
+            roles = imported.allRoles
+            status = "\(t("imported")) \(imported.lines.count) \(t("lines")) \(imported.sourceType.rawValue)."
+        } catch {
+            status = error.localizedDescription
+        }
+        isWorking = false
+    }
+
+    func export(outputFolder: String, settings: ExportSettings) async -> Bool {
+        guard let subtitle: ImportedSubtitle = importedSubtitle else {
+            status = SubtitleError.exportFailed(L.text("error.noInputSelected", AppLanguage.current)).localizedDescription
+            return false
+        }
+        isWorking = true
+        var succeeded: Bool = false
+        do {
+            let created: [String] = try await Task.detached(priority: .userInitiated) {
+                try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings)
+            }.value
+            status = "\(t("ready")). \(t("createdFiles")): \(created.count)"
+            succeeded = true
+        } catch {
+            status = error.localizedDescription
+        }
+        isWorking = false
+        return succeeded
+    }
+}
+
 struct ContentView: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @StateObject private var model: ProcessingModel = ProcessingModel()
     @State private var inputPath: String = ""
     @State private var outputFolder: String = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path ?? NSHomeDirectory()
-    @State private var importedSubtitle: ImportedSubtitle?
-    @State private var roles: [String] = []
     @State private var selectedRoles: Set<String> = []
     @State private var exportAss: Bool = false
     @State private var exportSrt: Bool = false
@@ -63,7 +114,6 @@ struct ContentView: View {
     @State private var closeProgramAfterProcessing: Bool = false
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
-    @State private var status: String = L.text("ready", .ru)
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)
@@ -98,7 +148,11 @@ struct ContentView: View {
             }
 
             HStack {
-                Text(status)
+                if model.isWorking {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(model.status)
                     .lineLimit(2)
                 Spacer()
                 Text("@boundlessend")
@@ -115,17 +169,17 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showRoleAssignment) {
-            if let subtitle: ImportedSubtitle = importedSubtitle {
+            if let subtitle: ImportedSubtitle = model.importedSubtitle {
                 RoleAssignmentView(
                     subtitle: subtitle,
                     outputFolder: outputFolder,
                     language: language,
                     onComplete: { path in
-                        appendLog("\(t("createdAssignment")): \(path)")
+                        model.log("\(t("createdAssignment")): \(path)")
                         showDoneAlert = true
                     },
                     onError: { message in
-                        appendLog(message)
+                        model.log(message)
                     }
                 )
                 .frame(minWidth: 860, minHeight: 620)
@@ -154,8 +208,9 @@ struct ContentView: View {
                     Button(t("makeRoleAssignment")) {
                         showRoleAssignment = true
                     }
-                    .disabled(importedSubtitle == nil || roles.isEmpty)
+                    .disabled(model.importedSubtitle == nil || model.roles.isEmpty)
                 }
+                .disabled(model.isWorking)
             }
         }
     }
@@ -165,7 +220,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(t("assignedRoles"))
                     .font(.headline)
-                List(roles, id: \.self) { role in
+                List(model.roles, id: \.self) { role in
                     Text(role)
                 }
                 .frame(height: 220)
@@ -185,7 +240,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                 TextField("", text: $outputFolder)
                     .textFieldStyle(.roundedBorder)
-                Text("\(t("source")): \(importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
+                Text("\(t("source")): \(model.importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
                     .fontWeight(.semibold)
             }
         }
@@ -250,7 +305,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(t("rolesForSeparateExport"))
                     .font(.headline)
-                List(roles, id: \.self, selection: $selectedRoles) { role in
+                List(model.roles, id: \.self, selection: $selectedRoles) { role in
                     Text(role)
                 }
                 .frame(height: 132)
@@ -286,45 +341,32 @@ struct ContentView: View {
         panel.canChooseDirectories = true
         if panel.runModal() == .OK, let url: URL = panel.url {
             outputFolder = url.path
-            appendLog("\(t("outputFolderLog")): \(url.path)")
+            model.log("\(t("outputFolderLog")): \(url.path)")
         }
     }
 
     private func reloadInput(path: String) {
-        do {
-            let imported: ImportedSubtitle = try SubtitleImporter.importFile(path: path)
-            importedSubtitle = imported
-            roles = imported.allRoles
-            selectedRoles = []
-            appendLog("\(t("imported")) \(imported.lines.count) \(t("lines")) \(imported.sourceType.rawValue).")
-        } catch {
-            appendLog(error.localizedDescription)
+        selectedRoles = []
+        Task {
+            await model.importFile(path: path)
         }
     }
 
     private func runExport() {
-        do {
-            guard let subtitle: ImportedSubtitle = importedSubtitle else {
-                throw SubtitleError.exportFailed(L.text("error.noInputSelected", language))
+        let settings: ExportSettings = ExportSettings(
+            exportAss: exportAss,
+            exportSrt: exportSrt,
+            exportVtt: exportVtt,
+            exportDocx: exportDocx,
+            srtFullWithRoles: srtFullWithRoles,
+            srtSeparateFiles: srtSeparateFiles,
+            srtSeparateWithRoles: srtSeparateWithRoles,
+            selectedRoles: selectedRoles
+        )
+        Task {
+            if await model.export(outputFolder: outputFolder, settings: settings) {
+                showDoneAlert = true
             }
-            let settings: ExportSettings = ExportSettings(
-                exportAss: exportAss,
-                exportSrt: exportSrt,
-                exportVtt: exportVtt,
-                exportDocx: exportDocx,
-                srtFullWithRoles: srtFullWithRoles,
-                srtSeparateFiles: srtSeparateFiles,
-                srtSeparateWithRoles: srtSeparateWithRoles,
-                selectedRoles: selectedRoles
-            )
-            let created: [String] = try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings)
-            for path in created {
-                appendLog("\(t("created")): \(path)")
-            }
-            appendLog("\(t("ready")). \(t("createdFiles")): \(created.count)")
-            showDoneAlert = true
-        } catch {
-            appendLog(error.localizedDescription)
         }
     }
 
@@ -338,7 +380,7 @@ struct ContentView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
             if let error {
                 DispatchQueue.main.async {
-                    appendLog(error.localizedDescription)
+                    model.log(error.localizedDescription)
                 }
                 return
             }
@@ -353,7 +395,7 @@ struct ContentView: View {
 
             guard let path: String = url?.path else {
                 DispatchQueue.main.async {
-                    appendLog(t("dropReadError"))
+                    model.log(t("dropReadError"))
                 }
                 return
             }
@@ -374,10 +416,6 @@ struct ContentView: View {
         if closeProgramAfterProcessing {
             NSApp.terminate(nil)
         }
-    }
-
-    private func appendLog(_ message: String) {
-        status = message
     }
 
 }

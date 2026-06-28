@@ -15,6 +15,7 @@ struct RoleAssignmentView: View {
     @State private var voiceCount: Int = 2
     @State private var roleSettings: [RoleGenderSetting] = []
     @State private var assignmentSummary: String = ""
+    @State private var isWorking: Bool = false
 
     private var roleCounts: [String: Int] {
         RoleAssignmentService.roleReplicaCounts(subtitle: subtitle)
@@ -54,10 +55,15 @@ struct RoleAssignmentView: View {
 
             HStack {
                 Spacer()
+                if isWorking {
+                    ProgressView()
+                        .controlSize(.small)
+                }
                 Button(t("assignRoles")) {
                     assignRoles()
                 }
                 .keyboardShortcut(.return)
+                .disabled(isWorking)
             }
         }
         .padding(18)
@@ -167,25 +173,34 @@ struct RoleAssignmentView: View {
     }
 
     private func assignRoles() {
-        do {
-            let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
-                subtitle: subtitle,
-                voices: voices,
-                roleSettings: roleSettings
-            )
-            let voiceSummaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result)
-            let path: String = try DocxExporter.export(
-                subtitle: subtitle,
-                outputFolder: outputFolder,
-                roleHighlights: result.roleToHighlight,
-                voiceSummaries: voiceSummaries,
-                fileSuffix: " [Разролёвка]"
-            )
-            assignmentSummary = buildSummary(result: result)
-            onComplete(path)
-            dismiss()
-        } catch {
-            onError(error.localizedDescription)
+        isWorking = true
+        Task {
+            do {
+                let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
+                    subtitle: subtitle,
+                    voices: voices,
+                    roleSettings: roleSettings
+                )
+                let voiceSummaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result)
+                let exportSubtitle: ImportedSubtitle = subtitle
+                let exportFolder: String = outputFolder
+                let path: String = try await Task.detached(priority: .userInitiated) {
+                    try DocxExporter.export(
+                        subtitle: exportSubtitle,
+                        outputFolder: exportFolder,
+                        roleHighlights: result.roleToHighlight,
+                        voiceSummaries: voiceSummaries,
+                        fileSuffix: " [Разролёвка]"
+                    )
+                }.value
+                assignmentSummary = buildSummary(result: result)
+                isWorking = false
+                onComplete(path)
+                dismiss()
+            } catch {
+                isWorking = false
+                onError(error.localizedDescription)
+            }
         }
     }
 
