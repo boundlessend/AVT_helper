@@ -105,7 +105,6 @@ enum L {
             .en: "No voice assigned for {g} roles."
         ],
         "error.cannotPickVoice": [.ru: "Не удалось выбрать голос для роли «{r}».", .en: "Could not pick a voice for role {r}."],
-        "error.zipFailed": [.ru: "zip завершился с кодом {code}", .en: "zip exited with code {code}"],
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."]
     ]
 }

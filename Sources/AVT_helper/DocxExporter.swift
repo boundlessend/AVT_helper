@@ -11,51 +11,32 @@ enum DocxExporter {
     ) throws -> String {
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
         let outputPath: String = URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase)\(fileSuffix).docx").path
-        let tempRoot: URL = FileManager.default.temporaryDirectory.appendingPathComponent("AVT_helper_docx_\(UUID().uuidString)")
-        defer {
-            try? FileManager.default.removeItem(at: tempRoot)
-        }
-        try createStructure(root: tempRoot)
-        try writeDocxFiles(root: tempRoot, subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
-        try zipDocx(root: tempRoot, outputPath: outputPath)
-        return outputPath
-    }
-
-    private static func createStructure(root: URL) throws {
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("_rels"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("word/_rels"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("docProps"), withIntermediateDirectories: true)
-    }
-
-    private static func writeDocxFiles(
-        root: URL,
-        subtitle: ImportedSubtitle,
-        roleHighlights: [String: WordHighlightColor],
-        voiceSummaries: [VoiceRoleSummary]
-    ) throws {
-        try contentTypes().write(to: root.appendingPathComponent("[Content_Types].xml"), atomically: true, encoding: .utf8)
-        try rootRels().write(to: root.appendingPathComponent("_rels/.rels"), atomically: true, encoding: .utf8)
-        try documentRels().write(to: root.appendingPathComponent("word/_rels/document.xml.rels"), atomically: true, encoding: .utf8)
-        try appProps().write(to: root.appendingPathComponent("docProps/app.xml"), atomically: true, encoding: .utf8)
-        try coreProps().write(to: root.appendingPathComponent("docProps/core.xml"), atomically: true, encoding: .utf8)
-        try documentXml(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
-            .write(to: root.appendingPathComponent("word/document.xml"), atomically: true, encoding: .utf8)
-        try stylesXml().write(to: root.appendingPathComponent("word/styles.xml"), atomically: true, encoding: .utf8)
-    }
-
-    private static func zipDocx(root: URL, outputPath: String) throws {
+        let entries: [ZipArchive.Entry] = docxEntries(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
+        let archive: Data = ZipArchive.archive(entries: entries)
         if FileManager.default.fileExists(atPath: outputPath) {
             try FileManager.default.removeItem(atPath: outputPath)
         }
-        let process: Process = Process()
-        process.currentDirectoryURL = root
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        process.arguments = ["-qr", outputPath, "."]
-        try process.run()
-        process.waitUntilExit()
-        if process.terminationStatus != 0 {
-            throw SubtitleError.exportFailed(L.format("error.zipFailed", AppLanguage.current, ["code": String(process.terminationStatus)]))
-        }
+        try archive.write(to: URL(fileURLWithPath: outputPath))
+        return outputPath
+    }
+
+    private static func docxEntries(
+        subtitle: ImportedSubtitle,
+        roleHighlights: [String: WordHighlightColor],
+        voiceSummaries: [VoiceRoleSummary]
+    ) -> [ZipArchive.Entry] {
+        [
+            ZipArchive.Entry(path: "[Content_Types].xml", data: Data(contentTypes().utf8)),
+            ZipArchive.Entry(path: "_rels/.rels", data: Data(rootRels().utf8)),
+            ZipArchive.Entry(path: "word/_rels/document.xml.rels", data: Data(documentRels().utf8)),
+            ZipArchive.Entry(path: "docProps/app.xml", data: Data(appProps().utf8)),
+            ZipArchive.Entry(path: "docProps/core.xml", data: Data(coreProps().utf8)),
+            ZipArchive.Entry(
+                path: "word/document.xml",
+                data: Data(documentXml(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries).utf8)
+            ),
+            ZipArchive.Entry(path: "word/styles.xml", data: Data(stylesXml().utf8))
+        ]
     }
 
     private static func documentXml(
