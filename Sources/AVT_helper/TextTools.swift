@@ -7,7 +7,8 @@ enum TextTools {
             return Roles.unassigned
         }
 
-        let replaced: String = trimmed
+        let replaced: String =
+            trimmed
             .replacingOccurrences(of: " , ", with: "_")
             .replacingOccurrences(of: " / ", with: "_")
             .replacingOccurrences(of: " \\ ", with: "_")
@@ -26,7 +27,8 @@ enum TextTools {
             with: "",
             options: [.regularExpression]
         )
-        return withoutOverrides
+        return
+            withoutOverrides
             .replacingOccurrences(of: "\\N", with: "\n")
             .replacingOccurrences(of: "\\n", with: "\n")
             .replacingOccurrences(of: "\\h", with: " ")
@@ -95,7 +97,8 @@ enum TextTools {
 
     static func safeFileName(_ input: String) -> String {
         let invalid: CharacterSet = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        let clean: String = input
+        let clean: String =
+            input
             .components(separatedBy: invalid)
             .joined(separator: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)

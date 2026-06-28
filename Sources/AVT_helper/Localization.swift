@@ -15,12 +15,12 @@ enum L {
     private static let values: [String: [AppLanguage: String]] = [
         "app.description": [
             .ru: "AVT_helper — нативная macOS-утилита для конвертации субтитров, DOCX-таблиц и разролёвки.",
-            .en: "AVT_helper is a native macOS utility for subtitle conversion, DOCX tables, and role assignment."
+            .en: "AVT_helper is a native macOS utility for subtitle conversion, DOCX tables, and role assignment.",
         ],
         "about": [.ru: "О программе", .en: "About"],
         "about.description": [
             .ru: "Конвертирует ASS, SSA, SRT, VTT и SRP в популярные форматы субтитров и DOCX с ролями, таймингами, репликами и статистикой.",
-            .en: "Converts ASS, SSA, SRT, VTT, and SRP into popular subtitle formats and DOCX files with roles, timings, dialogue, and statistics."
+            .en: "Converts ASS, SSA, SRT, VTT, and SRP into popular subtitle formats and DOCX files with roles, timings, dialogue, and statistics.",
         ],
         "version": [.ru: "Версия", .en: "Version"],
         "qa": [.ru: "Q&A", .en: "Q&A"],
@@ -34,7 +34,7 @@ enum L {
         "inputFile": [.ru: "Исходный файл", .en: "Input file"],
         "dropHint": [
             .ru: "Перетащите сюда файл субтитров или нажмите «Открыть субтитры»",
-            .en: "Drop a subtitle file here or click “Open subtitles”"
+            .en: "Drop a subtitle file here or click “Open subtitles”",
         ],
         "outputFolder": [.ru: "Папка выгрузки", .en: "Output folder"],
         "source": [.ru: "Источник", .en: "Source"],
@@ -62,12 +62,12 @@ enum L {
         "qa.q2": [.ru: "Что создаёт экспорт DOCX?", .en: "What does DOCX export create?"],
         "qa.a2": [
             .ru: "Документ с названием файла, списком ролей, таблицей таймингов/ролей/реплик и статистикой по ролям.",
-            .en: "A document with the file name, role list, timing/role/dialogue table, and role statistics."
+            .en: "A document with the file name, role list, timing/role/dialogue table, and role statistics.",
         ],
         "qa.q3": [.ru: "Как работает разролёвка?", .en: "How does role assignment work?"],
         "qa.a3": [
             .ru: "Роли распределяются по голосам с учётом пола и количества реплик, затем роли подсвечиваются цветами Word highlight.",
-            .en: "Roles are distributed across voices by gender and line count, then highlighted with Word highlight colors."
+            .en: "Roles are distributed across voices by gender and line count, then highlighted with Word highlight colors.",
         ],
         "qa.q4": [.ru: "Можно ли перетащить файл?", .en: "Can I drag and drop a file?"],
         "qa.a4": [.ru: "Да, перетащите файл в большую область «Исходный файл».", .en: "Yes. Drop a file into the large Input file area."],
@@ -95,16 +95,16 @@ enum L {
         "error.notRegularFile": [.ru: "Источник не является обычным файлом: {path}", .en: "Source is not a regular file: {path}"],
         "error.fileTooLarge": [
             .ru: "Файл слишком большой: {size} байт. Максимум: {max} байт.",
-            .en: "File is too large: {size} bytes. Maximum: {max} bytes."
+            .en: "File is too large: {size} bytes. Maximum: {max} bytes.",
         ],
         "error.noFormatSelected": [.ru: "Не выбран ни один формат экспорта.", .en: "No export format selected."],
         "error.noInputSelected": [.ru: "Сначала выберите исходный файл.", .en: "Select a source file first."],
         "error.noVoices": [.ru: "Добавьте хотя бы один голос для разролёвки.", .en: "Add at least one voice for role assignment."],
         "error.noVoiceForGender": [
             .ru: "Для ролей пола «{g}» не назначен ни один голос.",
-            .en: "No voice assigned for {g} roles."
+            .en: "No voice assigned for {g} roles.",
         ],
         "error.cannotPickVoice": [.ru: "Не удалось выбрать голос для роли «{r}».", .en: "Could not pick a voice for role {r}."],
-        "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."]
+        "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
     ]
 }

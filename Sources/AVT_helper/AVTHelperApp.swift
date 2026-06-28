@@ -371,9 +371,11 @@ struct ContentView: View {
     }
 
     private func handleInputDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider: NSItemProvider = providers.first(where: { item in
-            item.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-        }) else {
+        guard
+            let provider: NSItemProvider = providers.first(where: { item in
+                item.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+            })
+        else {
             return false
         }
 
@@ -387,7 +389,8 @@ struct ContentView: View {
 
             let url: URL?
             if let data: Data = item as? Data,
-               let text: String = String(data: data, encoding: .utf8) {
+                let text: String = String(data: data, encoding: .utf8)
+            {
                 url = URL(string: text)
             } else {
                 url = item as? URL

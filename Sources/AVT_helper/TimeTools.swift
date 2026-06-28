@@ -10,7 +10,8 @@ enum TimeTools {
     }
 
     static func parseAss(_ input: String) throws -> TimeInterval {
-        let normalized: String = input
+        let normalized: String =
+            input
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: ".")
         let parts: [String] = normalized.components(separatedBy: ".")
@@ -19,10 +20,11 @@ enum TimeTools {
         }
         let hms: [String] = parts[0].components(separatedBy: ":")
         guard hms.count == 3,
-              let hours: Int = Int(hms[0]),
-              let minutes: Int = Int(hms[1]),
-              let seconds: Int = Int(hms[2]),
-              let fraction: Int = Int(parts[1]) else {
+            let hours: Int = Int(hms[0]),
+            let minutes: Int = Int(hms[1]),
+            let seconds: Int = Int(hms[2]),
+            let fraction: Int = Int(parts[1])
+        else {
             throw SubtitleError.invalidTime(input)
         }
         let milliseconds: Int = parts[1].count == 2 ? fraction * 10 : fraction
@@ -77,8 +79,9 @@ enum TimeTools {
             seconds = parsedSeconds
         } else {
             guard let parsedHours: Int = Int(hms[0]),
-                  let parsedMinutes: Int = Int(hms[1]),
-                  let parsedSeconds: Int = Int(hms[2]) else {
+                let parsedMinutes: Int = Int(hms[1]),
+                let parsedSeconds: Int = Int(hms[2])
+            else {
                 throw SubtitleError.invalidTime(input)
             }
             hours = parsedHours

@@ -10,7 +10,7 @@ struct RoleAssignmentView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var voices: [VoiceConfig] = [
         VoiceConfig(id: 1, gender: .male, color: .yellow),
-        VoiceConfig(id: 2, gender: .female, color: .green)
+        VoiceConfig(id: 2, gender: .female, color: .green),
     ]
     @State private var voiceCount: Int = 2
     @State private var roleSettings: [RoleGenderSetting] = []

@@ -80,7 +80,7 @@ struct QAView: View {
             ("qa.q1", "qa.a1"),
             ("qa.q2", "qa.a2"),
             ("qa.q3", "qa.a3"),
-            ("qa.q4", "qa.a4")
+            ("qa.q4", "qa.a4"),
         ]
     }
 

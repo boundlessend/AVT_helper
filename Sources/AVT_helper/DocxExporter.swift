@@ -35,7 +35,7 @@ enum DocxExporter {
                 path: "word/document.xml",
                 data: Data(documentXml(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries).utf8)
             ),
-            ZipArchive.Entry(path: "word/styles.xml", data: Data(stylesXml().utf8))
+            ZipArchive.Entry(path: "word/styles.xml", data: Data(stylesXml().utf8)),
         ]
     }
 
@@ -60,25 +60,25 @@ enum DocxExporter {
         }.joined()
         let statistics: String = roleStatistics(subtitle: subtitle)
         return """
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-          <w:body>
-            \(paragraph(subtitle.baseName, bold: true, center: true, fontSize: "26", highlight: nil))
-            \(paragraph(rolesLine, bold: false, center: false, fontSize: "22", highlight: nil))
-            \(voiceSummaryXml)
-            <w:tbl>
-              <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr>
-              <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1800"/><w:gridCol w:w="8200"/></w:tblGrid>
-              \(headerRow())
-              \(rows)
-            </w:tbl>
-            \(paragraph("", bold: false, center: false, fontSize: "22", highlight: nil))
-            \(paragraph("Статистика по ролям", bold: true, center: false, fontSize: "22", highlight: nil))
-            \(statistics)
-            <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="850"/></w:sectPr>
-          </w:body>
-        </w:document>
-        """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+              <w:body>
+                \(paragraph(subtitle.baseName, bold: true, center: true, fontSize: "26", highlight: nil))
+                \(paragraph(rolesLine, bold: false, center: false, fontSize: "22", highlight: nil))
+                \(voiceSummaryXml)
+                <w:tbl>
+                  <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr>
+                  <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1800"/><w:gridCol w:w="8200"/></w:tblGrid>
+                  \(headerRow())
+                  \(rows)
+                </w:tbl>
+                \(paragraph("", bold: false, center: false, fontSize: "22", highlight: nil))
+                \(paragraph("Статистика по ролям", bold: true, center: false, fontSize: "22", highlight: nil))
+                \(statistics)
+                <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="850"/></w:sectPr>
+              </w:body>
+            </w:document>
+            """
     }
 
     private static func voiceSummaryParagraph(_ summary: VoiceRoleSummary) -> String {
@@ -86,8 +86,8 @@ enum DocxExporter {
         let roleList: String = summary.roles.joined(separator: ", ")
         let tail: String = TextTools.xmlEscape(" \(summary.voice.gender.shortTitle) - \(roleList)")
         return """
-        <w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:highlight w:val="\(summary.voice.color.wordValue)"/></w:rPr><w:t xml:space="preserve">\(voiceTitle)</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">\(tail)</w:t></w:r></w:p>
-        """
+            <w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:highlight w:val="\(summary.voice.color.wordValue)"/></w:rPr><w:t xml:space="preserve">\(voiceTitle)</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">\(tail)</w:t></w:r></w:p>
+            """
     }
 
     private static func headerRow() -> String {
@@ -111,7 +111,8 @@ enum DocxExporter {
                 counts[role] = 1
             }
         }
-        return order
+        return
+            order
             .sorted { left, right in left.localizedCaseInsensitiveCompare(right) == .orderedAscending }
             .map { role in
                 paragraph("\(role) - \(counts[role, default: 0])", bold: false, center: false, fontSize: "22", highlight: nil)
@@ -152,8 +153,8 @@ enum DocxExporter {
             index == 0 ? #"<w:t xml:space="preserve">\#(line)</w:t>"# : #"<w:br/><w:t xml:space="preserve">\#(line)</w:t>"#
         }.joined()
         return """
-        <w:p>\(paragraphProperties)<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="\(fontSize)"/>\(boldXml)\(highlightXml)</w:rPr>\(textXml)</w:r></w:p>
-        """
+            <w:p>\(paragraphProperties)<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="\(fontSize)"/>\(boldXml)\(highlightXml)</w:rPr>\(textXml)</w:r></w:p>
+            """
     }
 
     private static func highlightForRoles(_ roles: [String], roleHighlights: [String: WordHighlightColor]) -> WordHighlightColor? {

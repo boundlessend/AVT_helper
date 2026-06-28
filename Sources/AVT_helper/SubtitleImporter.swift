@@ -58,10 +58,13 @@ enum SubtitleImporter {
         }
         let fileSize: UInt64 = UInt64(values.fileSize ?? 0)
         if fileSize > AppLimits.maxSubtitleFileBytes {
-            throw SubtitleError.importFailed(L.format("error.fileTooLarge", language, [
-                "size": String(fileSize),
-                "max": String(AppLimits.maxSubtitleFileBytes)
-            ]))
+            throw SubtitleError.importFailed(
+                L.format(
+                    "error.fileTooLarge", language,
+                    [
+                        "size": String(fileSize),
+                        "max": String(AppLimits.maxSubtitleFileBytes),
+                    ]))
         }
     }
 
@@ -104,8 +107,9 @@ enum SubtitleImporter {
             let payload: String = String(rawLine.dropFirst("Dialogue:".count))
             let parts: [Substring] = payload.split(separator: ",", maxSplits: 9, omittingEmptySubsequences: false)
             guard parts.count >= 10,
-                  let start: TimeInterval = try? TimeTools.parseAss(String(parts[1])),
-                  let end: TimeInterval = try? TimeTools.parseAss(String(parts[2])) else {
+                let start: TimeInterval = try? TimeTools.parseAss(String(parts[1])),
+                let end: TimeInterval = try? TimeTools.parseAss(String(parts[2]))
+            else {
                 return nil
             }
 
@@ -137,8 +141,9 @@ enum SubtitleImporter {
             }
             let timeParts: [String] = lines[timeIndex].components(separatedBy: "-->")
             guard timeParts.count == 2,
-                  let start: TimeInterval = try? TimeTools.parseSrt(timeParts[0]),
-                  let end: TimeInterval = try? TimeTools.parseSrt(timeParts[1]) else {
+                let start: TimeInterval = try? TimeTools.parseSrt(timeParts[0]),
+                let end: TimeInterval = try? TimeTools.parseSrt(timeParts[1])
+            else {
                 return nil
             }
             let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -159,13 +164,14 @@ enum SubtitleImporter {
             }
             let timeParts: [String] = lines[timeIndex].components(separatedBy: "-->")
             guard timeParts.count == 2,
-                  let start: TimeInterval = try? TimeTools.parseVtt(timeParts[0]),
-                  let end: TimeInterval = try? TimeTools.parseVtt(
+                let start: TimeInterval = try? TimeTools.parseVtt(timeParts[0]),
+                let end: TimeInterval = try? TimeTools.parseVtt(
                     timeParts[1]
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                         .components(separatedBy: .whitespaces)
                         .first ?? ""
-                  ) else {
+                )
+            else {
                 return nil
             }
             let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -186,7 +192,8 @@ enum SubtitleImporter {
                 .replacingOccurrences(of: "\\h", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard let start: TimeInterval = flexibleTime(childText(node: node, name: "BeginTime")),
-                  let end: TimeInterval = flexibleTime(childText(node: node, name: "EndTime")) else {
+                let end: TimeInterval = flexibleTime(childText(node: node, name: "EndTime"))
+            else {
                 return nil
             }
             return SubtitleLine(id: UUID(), start: start, end: end, role: role, roles: [role], text: rawText, style: "", effect: "", sex: sex)
