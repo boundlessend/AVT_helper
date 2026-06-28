@@ -32,11 +32,23 @@ jobs:
       - name: Swift version
         run: swift --version
 
+      - name: Lint (swift-format)
+        run: |
+          if swift format --version >/dev/null 2>&1; then
+            swift format lint --strict --recursive Sources
+          else
+            brew install swift-format
+            swift-format lint --strict --recursive Sources
+          fi
+
       - name: Resolve dependencies
         run: swift package resolve
 
       - name: Build
         run: swift build -c release
+
+      - name: Test
+        run: swift test
 
       - name: Build app bundle
         run: ./scripts/build_app.sh

@@ -11,6 +11,7 @@ let package = Package(
         .executable(name: "AVT_helper", targets: ["AVT_helper"])
     ],
     targets: [
-        .executableTarget(name: "AVT_helper")
+        .executableTarget(name: "AVT_helper"),
+        .testTarget(name: "AVT_helperTests", dependencies: ["AVT_helper"])
     ]
 )
