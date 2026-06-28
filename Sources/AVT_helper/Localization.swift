@@ -13,10 +13,6 @@ enum L {
     }
 
     private static let values: [String: [AppLanguage: String]] = [
-        "app.description": [
-            .ru: "AVT_helper — нативная macOS-утилита для конвертации субтитров, DOCX-таблиц и разролёвки.",
-            .en: "AVT_helper is a native macOS utility for subtitle conversion, DOCX tables, and role assignment.",
-        ],
         "about": [.ru: "О программе", .en: "About"],
         "about.description": [
             .ru: "Конвертирует ASS, SSA, SRT, VTT и SRP в популярные форматы субтитров и DOCX с ролями, таймингами, репликами и статистикой.",
@@ -73,7 +69,6 @@ enum L {
         "qa.a4": [.ru: "Да, перетащите файл в большую область «Исходный файл».", .en: "Yes. Drop a file into the large Input file area."],
         "imported": [.ru: "Импортировано", .en: "Imported"],
         "lines": [.ru: "реплик", .en: "lines"],
-        "created": [.ru: "Создано", .en: "Created"],
         "createdAssignment": [.ru: "Создана разролёвка", .en: "Role assignment created"],
         "outputFolderLog": [.ru: "Папка выгрузки", .en: "Output folder"],
         "createdFiles": [.ru: "Создано файлов", .en: "Created files"],

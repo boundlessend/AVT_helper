@@ -24,6 +24,8 @@
 
 L’application importe `ASS`, `SSA`, `SRT`, `VTT` et `SRP`, exporte `ASS`, `SRT`, `VTT` et `DOCX`, et peut créer des DOCX de répartition des rôles avec les couleurs de surlignage Word.
 
+L'encodage des fichiers d'entrée (UTF-8, UTF-16, Windows-1251) est détecté automatiquement, et le traitement s'exécute en arrière-plan pour garder la fenêtre réactive sur les gros fichiers.
+
 ## Installation
 
 1. Téléchargez `AVT_helper.dmg` depuis la dernière release.

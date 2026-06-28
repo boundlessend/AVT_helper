@@ -24,6 +24,8 @@
 
 It imports `ASS`, `SSA`, `SRT`, `VTT`, and `SRP`, exports `ASS`, `SRT`, `VTT`, and `DOCX`, and can create role-assignment DOCX files with Word highlight colors.
 
+Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically, and processing runs in the background so the window stays responsive on large files.
+
 ## Install
 
 1. Download `AVT_helper.dmg` from the latest release.
