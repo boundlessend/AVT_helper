@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - "**"
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -37,10 +37,10 @@ jobs:
       - name: Lint (swift-format)
         run: |
           if swift format --version >/dev/null 2>&1; then
-            swift format lint --strict --recursive Sources
+            swift format lint --strict --recursive Sources Tests
           else
             brew install swift-format
-            swift-format lint --strict --recursive Sources
+            swift-format lint --strict --recursive Sources Tests
           fi
 
       - name: Resolve dependencies

@@ -46,12 +46,14 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <string>@boundlessend</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
     <key>NSHighResolutionCapable</key>
     <true/>
   </dict>
 </plist>
 PLIST
 
-codesign --force --deep --sign - "${APP_DIR}"
+codesign --force --sign - "${APP_DIR}"
 
 echo "Created ${APP_DIR}"
