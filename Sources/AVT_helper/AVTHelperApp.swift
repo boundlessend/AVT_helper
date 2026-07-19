@@ -52,6 +52,7 @@ final class ProcessingModel: ObservableObject {
     @Published var roles: [String] = []
     @Published var status: String = L.text("ready", AppLanguage.current)
     @Published var isWorking: Bool = false
+    @Published var lastCreatedFiles: [String] = []
 
     private func t(_ key: String) -> String {
         L.text(key, AppLanguage.current)
@@ -87,6 +88,7 @@ final class ProcessingModel: ObservableObject {
             let created: [String] = try await Task.detached(priority: .userInitiated) {
                 try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings)
             }.value
+            lastCreatedFiles = created
             status = "\(t("ready")). \(t("createdFiles")): \(created.count)"
             succeeded = true
         } catch {
@@ -103,17 +105,18 @@ struct ContentView: View {
     @State private var inputPath: String = ""
     @State private var outputFolder: String = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path ?? NSHomeDirectory()
     @State private var selectedRoles: Set<String> = []
-    @State private var exportAss: Bool = false
-    @State private var exportSrt: Bool = false
-    @State private var exportVtt: Bool = false
-    @State private var exportDocx: Bool = false
-    @State private var srtFullWithRoles: Bool = false
-    @State private var srtSeparateFiles: Bool = false
-    @State private var srtSeparateWithRoles: Bool = false
-    @State private var openFolderAfterProcessing: Bool = false
-    @State private var closeProgramAfterProcessing: Bool = false
+    @AppStorage("exportAss") private var exportAss: Bool = false
+    @AppStorage("exportSrt") private var exportSrt: Bool = false
+    @AppStorage("exportVtt") private var exportVtt: Bool = false
+    @AppStorage("exportDocx") private var exportDocx: Bool = false
+    @AppStorage("srtFullWithRoles") private var srtFullWithRoles: Bool = false
+    @AppStorage("srtSeparateFiles") private var srtSeparateFiles: Bool = false
+    @AppStorage("srtSeparateWithRoles") private var srtSeparateWithRoles: Bool = false
+    @AppStorage("openFolderAfterProcessing") private var openFolderAfterProcessing: Bool = false
+    @AppStorage("closeProgramAfterProcessing") private var closeProgramAfterProcessing: Bool = false
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
+    @State private var isDropTargeted: Bool = false
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)
@@ -167,6 +170,12 @@ struct ContentView: View {
             Button(t("ok")) {
                 completeProcessing()
             }
+        } message: {
+            Text(
+                model.lastCreatedFiles
+                    .map { path in URL(fileURLWithPath: path).lastPathComponent }
+                    .joined(separator: "\n")
+            )
         }
         .sheet(isPresented: $showRoleAssignment) {
             if let subtitle: ImportedSubtitle = model.importedSubtitle {
@@ -175,6 +184,7 @@ struct ContentView: View {
                     outputFolder: outputFolder,
                     language: language,
                     onComplete: { path in
+                        model.lastCreatedFiles = [path]
                         model.log("\(t("createdAssignment")): \(path)")
                         showDoneAlert = true
                     },
@@ -258,14 +268,14 @@ struct ContentView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(isDropTargeted ? Color.accentColor.opacity(0.15) : Color(nsColor: .textBackgroundColor))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
-                .foregroundStyle(.secondary)
+                .stroke(style: StrokeStyle(lineWidth: isDropTargeted ? 2 : 1, dash: [6, 4]))
+                .foregroundStyle(isDropTargeted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
+        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
             handleInputDrop(providers: providers)
         }
     }
@@ -448,16 +458,6 @@ struct AppMenuCommands: Commands {
             } label: {
                 Label(L.text("settings", language), systemImage: "gearshape")
             }
-        }
-    }
-}
-
-enum AppCache {
-    static func resetTemporaryFiles() {
-        let tempUrl: URL = FileManager.default.temporaryDirectory
-        let items: [URL] = (try? FileManager.default.contentsOfDirectory(at: tempUrl, includingPropertiesForKeys: nil)) ?? []
-        for item in items where item.lastPathComponent.hasPrefix("AVT_helper_docx_") {
-            try? FileManager.default.removeItem(at: item)
         }
     }
 }

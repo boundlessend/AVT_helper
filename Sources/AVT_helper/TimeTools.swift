@@ -1,8 +1,9 @@
 import Foundation
 
 enum TimeTools {
+    /// разбирает таймкод SRT, допуская точку как разделитель миллисекунд в нестрогих файлах
     static func parseSrt(_ input: String) throws -> TimeInterval {
-        try parseTime(input, separator: ",", allowShort: false)
+        try parseTime(input.replacingOccurrences(of: ".", with: ","), separator: ",", allowShort: false)
     }
 
     static func parseVtt(_ input: String) throws -> TimeInterval {
@@ -22,12 +23,11 @@ enum TimeTools {
         guard hms.count == 3,
             let hours: Int = Int(hms[0]),
             let minutes: Int = Int(hms[1]),
-            let seconds: Int = Int(hms[2]),
-            let fraction: Int = Int(parts[1])
+            let seconds: Int = Int(hms[2])
         else {
             throw SubtitleError.invalidTime(input)
         }
-        let milliseconds: Int = parts[1].count == 2 ? fraction * 10 : fraction
+        let milliseconds: Int = try fractionMilliseconds(parts[1])
         return TimeInterval((hours * 3600 + minutes * 60 + seconds)) + TimeInterval(milliseconds) / 1000
     }
 
@@ -63,7 +63,7 @@ enum TimeTools {
 
         let hms: [String] = parts[0].components(separatedBy: ":")
         let validCount: Bool = allowShort ? (hms.count == 2 || hms.count == 3) : hms.count == 3
-        guard validCount, let fraction: Int = Int(parts[1]) else {
+        guard validCount else {
             throw SubtitleError.invalidTime(input)
         }
 
@@ -89,8 +89,24 @@ enum TimeTools {
             seconds = parsedSeconds
         }
 
-        let milliseconds: Int = parts[1].count == 2 ? fraction * 10 : fraction
+        let milliseconds: Int = try fractionMilliseconds(parts[1])
         return TimeInterval((hours * 3600 + minutes * 60 + seconds)) + TimeInterval(milliseconds) / 1000
+    }
+
+    /// переводит долю секунды в миллисекунды с учётом числа цифр: "5" -> 500, "50" -> 500, "500" -> 500
+    private static func fractionMilliseconds(_ raw: String) throws -> Int {
+        let digits: String = String(raw.prefix(3))
+        guard !digits.isEmpty, let value: Int = Int(digits) else {
+            throw SubtitleError.invalidTime(raw)
+        }
+        switch digits.count {
+        case 1:
+            return value * 100
+        case 2:
+            return value * 10
+        default:
+            return value
+        }
     }
 
     private static func splitTime(_ input: TimeInterval) -> TimeParts {

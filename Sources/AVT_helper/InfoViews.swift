@@ -28,9 +28,7 @@ struct SettingsWindow: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
 
     var body: some View {
-        SettingsView(languageRaw: $appLanguageRaw) {
-            AppCache.resetTemporaryFiles()
-        }
+        SettingsView(languageRaw: $appLanguageRaw)
     }
 }
 
@@ -115,7 +113,6 @@ struct QAView: View {
 
 struct SettingsView: View {
     @Binding var languageRaw: String
-    let onResetCache: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     private var language: AppLanguage {
@@ -139,13 +136,6 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
-
-            Button(role: .destructive) {
-                onResetCache()
-                dismiss()
-            } label: {
-                Label(L.text("settings.resetCache", language), systemImage: "trash")
-            }
 
             Spacer()
         }

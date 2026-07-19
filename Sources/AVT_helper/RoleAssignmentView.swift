@@ -7,6 +7,9 @@ struct RoleAssignmentView: View {
     let onComplete: (String) -> Void
     let onError: (String) -> Void
 
+    /// считается один раз при создании, чтобы не пересчитывать все реплики на каждый рендер списка
+    private let roleCounts: [String: Int]
+
     @Environment(\.dismiss) private var dismiss
     @State private var voices: [VoiceConfig] = [
         VoiceConfig(id: 1, gender: .male, color: .yellow),
@@ -17,8 +20,19 @@ struct RoleAssignmentView: View {
     @State private var assignmentSummary: String = ""
     @State private var isWorking: Bool = false
 
-    private var roleCounts: [String: Int] {
-        RoleAssignmentService.roleReplicaCounts(subtitle: subtitle)
+    init(
+        subtitle: ImportedSubtitle,
+        outputFolder: String,
+        language: AppLanguage,
+        onComplete: @escaping (String) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        self.subtitle = subtitle
+        self.outputFolder = outputFolder
+        self.language = language
+        self.onComplete = onComplete
+        self.onError = onError
+        self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle)
     }
 
     private func t(_ key: String) -> String {
@@ -184,13 +198,14 @@ struct RoleAssignmentView: View {
                 let voiceSummaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result)
                 let exportSubtitle: ImportedSubtitle = subtitle
                 let exportFolder: String = outputFolder
+                let suffix: String = L.text("file.assignmentSuffix", language)
                 let path: String = try await Task.detached(priority: .userInitiated) {
                     try DocxExporter.export(
                         subtitle: exportSubtitle,
                         outputFolder: exportFolder,
                         roleHighlights: result.roleToHighlight,
                         voiceSummaries: voiceSummaries,
-                        fileSuffix: " [Разролёвка]"
+                        fileSuffix: suffix
                     )
                 }.value
                 assignmentSummary = buildSummary(result: result)

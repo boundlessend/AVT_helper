@@ -54,9 +54,10 @@ enum DocxExporter {
             )
         }.joined()
 
+        let language: AppLanguage = AppLanguage.current
         let rolesLine: String = subtitle.allRoles.joined(separator: ", ")
         let voiceSummaryXml: String = voiceSummaries.map { summary in
-            voiceSummaryParagraph(summary)
+            voiceSummaryParagraph(summary, language: language)
         }.joined()
         let statistics: String = roleStatistics(subtitle: subtitle)
         return """
@@ -69,11 +70,11 @@ enum DocxExporter {
                 <w:tbl>
                   <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr>
                   <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1800"/><w:gridCol w:w="8200"/></w:tblGrid>
-                  \(headerRow())
+                  \(headerRow(language: language))
                   \(rows)
                 </w:tbl>
                 \(paragraph("", bold: false, center: false, fontSize: "22", highlight: nil))
-                \(paragraph("Статистика по ролям", bold: true, center: false, fontSize: "22", highlight: nil))
+                \(paragraph(L.text("docx.roleStats", language), bold: true, center: false, fontSize: "22", highlight: nil))
                 \(statistics)
                 <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="850"/></w:sectPr>
               </w:body>
@@ -81,21 +82,21 @@ enum DocxExporter {
             """
     }
 
-    private static func voiceSummaryParagraph(_ summary: VoiceRoleSummary) -> String {
-        let voiceTitle: String = TextTools.xmlEscape("Голос \(summary.voice.id)")
+    private static func voiceSummaryParagraph(_ summary: VoiceRoleSummary, language: AppLanguage) -> String {
+        let voiceTitle: String = TextTools.xmlEscape("\(L.text("voice", language)) \(summary.voice.id)")
         let roleList: String = summary.roles.joined(separator: ", ")
-        let tail: String = TextTools.xmlEscape(" \(summary.voice.gender.shortTitle) - \(roleList)")
+        let tail: String = TextTools.xmlEscape(" \(summary.voice.gender.shortTitle(language)) - \(roleList)")
         return """
-            <w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:highlight w:val="\(summary.voice.color.wordValue)"/></w:rPr><w:t xml:space="preserve">\(voiceTitle)</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">\(tail)</w:t></w:r></w:p>
+            <w:p><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:highlight w:val="\(summary.voice.color.rawValue)"/></w:rPr><w:t xml:space="preserve">\(voiceTitle)</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">\(tail)</w:t></w:r></w:p>
             """
     }
 
-    private static func headerRow() -> String {
+    private static func headerRow(language: AppLanguage) -> String {
         """
         <w:tr>
-          \(tableCell("Тайминг", width: "1100", bold: true, alignment: "center", highlight: nil))
-          \(tableCell("Роль", width: "1800", bold: true, alignment: "center", highlight: nil))
-          \(tableCell("Реплика", width: "8200", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("docx.timing", language), width: "1100", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("docx.role", language), width: "1800", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("docx.replica", language), width: "8200", bold: true, alignment: "center", highlight: nil))
         </w:tr>
         """
     }
@@ -145,7 +146,7 @@ enum DocxExporter {
         highlight: WordHighlightColor?
     ) -> String {
         let boldXml: String = bold ? "<w:b/>" : ""
-        let highlightXml: String = highlight.map { color in #"<w:highlight w:val="\#(color.wordValue)"/>"# } ?? ""
+        let highlightXml: String = highlight.map { color in #"<w:highlight w:val="\#(color.rawValue)"/>"# } ?? ""
         let alignmentValue: String = center ? "center" : alignment
         let paragraphProperties: String = alignmentValue.isEmpty ? "" : #"<w:pPr><w:jc w:val="\#(alignmentValue)"/></w:pPr>"#
         let escapedLines: [String] = value.components(separatedBy: .newlines).map { line in TextTools.xmlEscape(line) }

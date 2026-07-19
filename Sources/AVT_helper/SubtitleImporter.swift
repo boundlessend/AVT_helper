@@ -22,6 +22,7 @@ enum SubtitleImporter {
 
         return ImportedSubtitle(
             baseName: url.deletingPathExtension().lastPathComponent,
+            sourcePath: url.standardizedFileURL.path,
             sourceType: sourceType,
             lines: lines.sorted { left, right in
                 if left.start == right.start {
@@ -220,7 +221,7 @@ enum SubtitleImporter {
     }
 
     private static func inferAssRole(name: String, style: String, effect: String) -> String {
-        if !name.isEmpty && name.caseInsensitiveCompare(Roles.unassigned) != .orderedSame {
+        if !name.isEmpty && !Roles.isUnassigned(name) {
             return name
         }
         if !style.isEmpty && style.caseInsensitiveCompare("Default") != .orderedSame {

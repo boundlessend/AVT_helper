@@ -51,7 +51,6 @@ enum L {
         "ok": [.ru: "OK", .en: "OK"],
         "ready": [.ru: "Готово", .en: "Ready"],
         "settings.language": [.ru: "Язык приложения", .en: "App language"],
-        "settings.resetCache": [.ru: "Сбросить кеш приложения", .en: "Reset app cache"],
         "settings.close": [.ru: "Закрыть", .en: "Close"],
         "qa.q1": [.ru: "Какие форматы можно импортировать?", .en: "Which formats can I import?"],
         "qa.a1": [.ru: "ASS, SSA, SRT, VTT и SRP.", .en: "ASS, SSA, SRT, VTT, and SRP."],
@@ -101,5 +100,11 @@ enum L {
         ],
         "error.cannotPickVoice": [.ru: "Не удалось выбрать голос для роли «{r}».", .en: "Could not pick a voice for role {r}."],
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
+        "role.unassigned": [.ru: "Не назначено", .en: "Unassigned"],
+        "docx.timing": [.ru: "Тайминг", .en: "Timing"],
+        "docx.role": [.ru: "Роль", .en: "Role"],
+        "docx.replica": [.ru: "Реплика", .en: "Line"],
+        "docx.roleStats": [.ru: "Статистика по ролям", .en: "Role statistics"],
+        "file.assignmentSuffix": [.ru: " [Разролёвка]", .en: " [Role assignment]"],
     ]
 }

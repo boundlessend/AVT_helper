@@ -38,8 +38,17 @@ enum AppLimits {
 }
 
 enum Roles {
-    /// каноническое имя для нераспознанной роли
-    static let unassigned: String = "Не назначено"
+    /// каноническое имя для нераспознанной роли на текущем языке приложения
+    static var unassigned: String {
+        L.text("role.unassigned", AppLanguage.current)
+    }
+
+    /// проверяет, что имя совпадает с меткой нераспознанной роли на любом из языков
+    static func isUnassigned(_ name: String) -> Bool {
+        AppLanguage.allCases.contains { language in
+            name.caseInsensitiveCompare(L.text("role.unassigned", language)) == .orderedSame
+        }
+    }
 }
 
 enum AppInfo {
@@ -85,6 +94,7 @@ struct SubtitleLine: Identifiable, Hashable {
 
 struct ImportedSubtitle {
     let baseName: String
+    let sourcePath: String
     let sourceType: SubtitleSourceType
     let lines: [SubtitleLine]
 
@@ -117,17 +127,21 @@ struct ExportSettings {
 }
 
 enum VoiceGender: String, CaseIterable, Identifiable {
-    case male = "Мужской"
-    case female = "Женский"
+    case male
+    case female
 
     var id: String { rawValue }
 
-    var shortTitle: String {
-        switch self {
-        case .male:
+    func shortTitle(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.male, .ru):
             return "м"
-        case .female:
+        case (.female, .ru):
             return "ж"
+        case (.male, .en):
+            return "m"
+        case (.female, .en):
+            return "f"
         }
     }
 
@@ -145,15 +159,16 @@ enum VoiceGender: String, CaseIterable, Identifiable {
     }
 }
 
+/// rawValue совпадает со значением w:highlight в формате Word
 enum WordHighlightColor: String, CaseIterable, Identifiable {
-    case yellow = "Желтый"
-    case green = "Зеленый"
-    case cyan = "Бирюзовый"
-    case magenta = "Розовый"
-    case blue = "Синий"
-    case red = "Красный"
-    case darkYellow = "Темно-желтый"
-    case lightGray = "Серый"
+    case yellow
+    case green
+    case cyan
+    case magenta
+    case blue
+    case red
+    case darkYellow
+    case lightGray
 
     var id: String { rawValue }
 
@@ -194,26 +209,6 @@ enum WordHighlightColor: String, CaseIterable, Identifiable {
         }
     }
 
-    var wordValue: String {
-        switch self {
-        case .yellow:
-            return "yellow"
-        case .green:
-            return "green"
-        case .cyan:
-            return "cyan"
-        case .magenta:
-            return "magenta"
-        case .blue:
-            return "blue"
-        case .red:
-            return "red"
-        case .darkYellow:
-            return "darkYellow"
-        case .lightGray:
-            return "lightGray"
-        }
-    }
 }
 
 struct VoiceConfig: Identifiable {
