@@ -41,14 +41,12 @@ struct RoleAssignmentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(t("roleAssignment"))
-                    .font(.title2.weight(.bold))
-                Spacer()
-                Button(t("close")) {
-                    dismiss()
-                }
-            }
+            WindowHeader(
+                title: t("roleAssignment"),
+                systemImage: nil,
+                closeTitle: t("close"),
+                onClose: { dismiss() }
+            )
 
             Stepper("\(t("voiceCount")): \(voiceCount)", value: $voiceCount, in: 1...12)
                 .onChange(of: voiceCount) { _, newValue in
@@ -138,12 +136,7 @@ struct RoleAssignmentView: View {
                             }
                         }
                         .frame(width: 210)
-                        Picker("", selection: $voice.gender) {
-                            ForEach(VoiceGender.allCases) { gender in
-                                Text(gender.title(language)).tag(gender)
-                            }
-                        }
-                        .frame(width: 150)
+                        genderPicker($voice.gender)
                     }
                 }
             }
@@ -161,15 +154,20 @@ struct RoleAssignmentView: View {
                 Text("\(roleCounts[setting.role, default: 0]) \(t("lineCountSuffix"))")
                     .foregroundStyle(.secondary)
                     .frame(width: 80, alignment: .trailing)
-                Picker("", selection: $setting.gender) {
-                    ForEach(VoiceGender.allCases) { gender in
-                        Text(gender.title(language)).tag(gender)
-                    }
-                }
-                .frame(width: 150)
+                genderPicker($setting.gender)
             }
         }
         .frame(minHeight: 240)
+    }
+
+    /// общий выбор пола, используется в таблице голосов и в списке ролей
+    private func genderPicker(_ selection: Binding<VoiceGender>) -> some View {
+        Picker("", selection: selection) {
+            ForEach(VoiceGender.allCases) { gender in
+                Text(gender.title(language)).tag(gender)
+            }
+        }
+        .frame(width: 150)
     }
 
     private func adjustVoices(count: Int) {

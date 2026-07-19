@@ -32,9 +32,34 @@ struct SettingsWindow: View {
     }
 }
 
+/// общий заголовок вспомогательных окон с кнопкой закрытия
+struct WindowHeader: View {
+    let title: String
+    let systemImage: String?
+    let closeTitle: String
+    let onClose: () -> Void
+
+    var body: some View {
+        HStack {
+            if let systemImage: String = systemImage {
+                Label(title, systemImage: systemImage)
+                    .font(.title2.weight(.bold))
+            } else {
+                Text(title)
+                    .font(.title2.weight(.bold))
+            }
+            Spacer()
+            Button(closeTitle, action: onClose)
+        }
+    }
+}
+
 struct AboutView: View {
     let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
+    @State private var updateStatus: String = ""
+    @State private var updatePageUrl: URL?
+    @State private var isCheckingUpdates: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -53,6 +78,29 @@ struct AboutView: View {
             Text(L.text("about.description", language))
                 .fixedSize(horizontal: false, vertical: true)
 
+            HStack {
+                Button(L.text("update.check", language)) {
+                    checkForUpdates()
+                }
+                .disabled(isCheckingUpdates)
+                if isCheckingUpdates {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                if let updatePageUrl: URL = updatePageUrl {
+                    Button(L.text("update.download", language)) {
+                        NSWorkspace.shared.open(updatePageUrl)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            if !updateStatus.isEmpty {
+                Text(updateStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Text("@boundlessend")
                 .fontWeight(.semibold)
 
@@ -60,12 +108,32 @@ struct AboutView: View {
 
             HStack {
                 Spacer()
-                Button(L.text("settings.close", language)) {
+                Button(L.text("close", language)) {
                     dismiss()
                 }
             }
         }
         .padding(16)
+    }
+
+    private func checkForUpdates() {
+        isCheckingUpdates = true
+        updateStatus = ""
+        updatePageUrl = nil
+        Task {
+            do {
+                let release: UpdateChecker.ReleaseInfo = try await UpdateChecker.fetchLatest()
+                if release.version == AppInfo.shortVersion {
+                    updateStatus = L.text("update.latest", language)
+                } else {
+                    updateStatus = L.format("update.available", language, ["v": release.version])
+                    updatePageUrl = release.pageUrl
+                }
+            } catch {
+                updateStatus = error.localizedDescription
+            }
+            isCheckingUpdates = false
+        }
     }
 }
 
@@ -84,14 +152,12 @@ struct QAView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(L.text("qa", language), systemImage: "questionmark.circle")
-                    .font(.title2.weight(.bold))
-                Spacer()
-                Button(L.text("settings.close", language)) {
-                    dismiss()
-                }
-            }
+            WindowHeader(
+                title: L.text("qa", language),
+                systemImage: "questionmark.circle",
+                closeTitle: L.text("close", language),
+                onClose: { dismiss() }
+            )
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -121,14 +187,12 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label(L.text("settings", language), systemImage: "gearshape")
-                    .font(.title2.weight(.bold))
-                Spacer()
-                Button(L.text("settings.close", language)) {
-                    dismiss()
-                }
-            }
+            WindowHeader(
+                title: L.text("settings", language),
+                systemImage: "gearshape",
+                closeTitle: L.text("close", language),
+                onClose: { dismiss() }
+            )
 
             Picker(L.text("settings.language", language), selection: $languageRaw) {
                 ForEach(AppLanguage.allCases) { item in

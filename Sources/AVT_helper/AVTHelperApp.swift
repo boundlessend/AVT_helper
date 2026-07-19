@@ -18,9 +18,9 @@ struct AVTHelperApp: App {
 
         Window("About", id: "about") {
             AboutWindow()
-                .frame(width: 380, height: 220)
+                .frame(width: 400, height: 300)
         }
-        .defaultSize(width: 380, height: 220)
+        .defaultSize(width: 400, height: 300)
         .windowResizability(.contentSize)
 
         Window("Q&A", id: "qa") {
