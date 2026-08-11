@@ -266,6 +266,17 @@ final class CoreTests: XCTestCase {
         }
     }
 
+    func testVersionComparison() {
+        XCTAssertEqual(UpdateChecker.normalizeTag("v.1.6.5"), "1.6.5")
+        XCTAssertEqual(UpdateChecker.normalizeTag("v1.6.5"), "1.6.5")
+        XCTAssertTrue(UpdateChecker.isNewer("1.10.0", than: "1.9.9"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.6.5", than: "0.0.0"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.7", than: "1.6.9"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.6.5", than: "1.6.5"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.6.4", than: "1.6.5"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.6.5", than: "1.6.6"))
+    }
+
     func testTextTools() {
         XCTAssertEqual(TextTools.cleanRoleName("   "), "")
         XCTAssertEqual(TextTools.cleanRoleName("Anna / Bob"), "Anna_Bob")

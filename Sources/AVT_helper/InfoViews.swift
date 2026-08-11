@@ -123,11 +123,11 @@ struct AboutView: View {
         Task {
             do {
                 let release: UpdateChecker.ReleaseInfo = try await UpdateChecker.fetchLatest()
-                if release.version == AppInfo.shortVersion {
-                    updateStatus = L.text("update.latest", language)
-                } else {
+                if UpdateChecker.isNewer(release.version, than: AppInfo.shortVersion) {
                     updateStatus = L.format("update.available", language, ["v": release.version])
                     updatePageUrl = release.pageUrl
+                } else {
+                    updateStatus = L.text("update.latest", language)
                 }
             } catch {
                 updateStatus = L.describe(error, language)

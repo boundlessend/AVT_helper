@@ -35,6 +35,26 @@ enum UpdateChecker {
         tag.replacingOccurrences(of: #"^v\.?"#, with: "", options: [.regularExpression])
     }
 
+    /// сравнивает версии покомпонентно, иначе 1.10.0 считалось бы старше 1.9.9
+    static func isNewer(_ candidate: String, than current: String) -> Bool {
+        let left: [Int] = numbers(candidate)
+        let right: [Int] = numbers(current)
+        for index in 0..<max(left.count, right.count) {
+            let leftPart: Int = index < left.count ? left[index] : 0
+            let rightPart: Int = index < right.count ? right[index] : 0
+            if leftPart != rightPart {
+                return leftPart > rightPart
+            }
+        }
+        return false
+    }
+
+    private static func numbers(_ version: String) -> [Int] {
+        version
+            .split(separator: ".")
+            .map { part in Int(part.prefix { character in character.isNumber }) ?? 0 }
+    }
+
     private struct LatestRelease: Decodable {
         let tagName: String
         let htmlUrl: String
