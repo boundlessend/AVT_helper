@@ -9,27 +9,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Check-for-updates button in the About window: it queries the latest GitHub release, reports whether a newer version exists, and offers a download link.
-- The completion alert now lists the files that were created.
+- The completion alert now lists the files that were created, caps a long list and offers `Show in Finder`.
 - A SHA-256 checksum file is published alongside the release DMG.
-- Tests covering ASS and VTT import, role-to-voice balancing, timecode fraction parsing, and source-file overwrite protection.
+- Progress bar with a percentage and a `Cancel` button for import and export.
+- `Open subtitles` in the `File` menu under `Cmd+O`; settings moved to a `Settings` scene reachable with `Cmd+,`.
+- Message log behind a click on the status bar, so an error stays readable after the next event.
+- Tests covering ASS, VTT and SRP import, DOCX content and validity, role-to-voice balancing, timecode fraction parsing, output name collisions, progress and cancellation, and version comparison.
 
 ### Changed
 
-- Export format checkboxes and post-processing toggles persist between launches.
+- Export format checkboxes and post-processing toggles persist between launches; SRT is enabled by default.
+- The output folder is remembered between launches.
 - DOCX table headers, role statistics, and voice summaries follow the app language instead of being Russian-only.
 - The "Unassigned" role label and the role-assignment file suffix follow the app language.
-- The drop zone highlights while a file is dragged over it.
-- Shared window header component reused across the Q&A, Settings, and role assignment windows.
-- Release workflow runs the test suite before building the DMG; CI lints `Tests` and no longer runs twice per pull request.
+- The two role lists became one list with a checkbox and a line count per role, plus `All` / `None` buttons; an empty selection now means no separate files instead of all of them.
+- `Start` is disabled with the reason in its tooltip when no file or no export format is chosen.
+- On first launch the interface follows the system language.
+- Role assignment reports its errors inside the sheet, warns about duplicate highlight colors, and refuses to run while a gender has no voice.
+- DOCX packages are compressed with deflate instead of being stored uncompressed.
+- The drop zone highlights while a file is dragged over it and uses `dropDestination`.
+- Release workflow lints, runs the test suite before building the DMG and refuses to publish a tag without a matching changelog section; CI no longer runs twice per pull request.
+- The app icon is generated from a single source image during the build instead of being committed as ten slices.
+- Builds outside a release tag carry a `-dev.<sha>` suffix in the displayed version.
 - The app bundle declares the Utilities category; `codesign` no longer uses the deprecated `--deep` flag.
+- The French README is gone: the interface itself is only Russian and English.
 
 ### Fixed
 
-- Exporting ASS or VTT into the folder of the imported file could silently overwrite the source; such exports now receive a ` (1)` name suffix.
+- Exporting into a folder that already holds files with the same names silently replaced them, and two roles whose names collapse to the same file name wrote into a single file; both cases now get a numbered suffix.
+- Control characters in dialogue produced a DOCX that Word refuses to open.
+- Role assignment errors went to the status bar of the main window, hidden behind the sheet.
+- The "Unassigned" label was frozen at import time and stayed in the import-time language.
+- The update check compared versions as strings, so it reported an update for any difference and would have called `1.10.0` older than `1.9.9`.
+- Curly braces in dialogue are escaped for ASS, so text that contains them survives a round trip.
+- A file that parses into zero lines is an import error instead of producing empty exports.
 - Single-digit fractions in timecodes were read as raw milliseconds (`,5` now parses as 500 ms), and SRT timecodes accept a dot separator.
 - Commas in ASS style and actor fields no longer break exported `Dialogue:` lines.
 - Removed the dead "Reset app cache" button that cleaned temporary files no longer produced by the app.
-- Role replica counts were recomputed on every render of the role assignment sheet.
+- Role names are normalized once at import instead of on every access, which removed a per-role pass over every line during export.
 
 ## [1.6.5] - 2026-06-28
 

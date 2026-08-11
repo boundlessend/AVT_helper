@@ -5,7 +5,7 @@
 <h1 align="center">AVT_helper</h1>
 
 <p align="center">
-  <strong>Language:</strong> EN | <a href="README.ru.md">RU</a> | <a href="README.fr.md">FR</a>
+  <strong>Language:</strong> EN | <a href="README.ru.md">RU</a>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 It imports `ASS`, `SSA`, `SRT`, `VTT`, and `SRP`, exports `ASS`, `SRT`, `VTT`, and `DOCX`, and can create role-assignment DOCX files with Word highlight colors.
 
-Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically, and processing runs in the background so the window stays responsive on large files.
+Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically. Import and export run in the background with a progress bar and can be cancelled, so the window stays responsive on large files.
 
 ## Install
 
@@ -43,13 +43,16 @@ Then open the app again.
 
 ## Usage
 
-> The app launches in Russian by default. Switch the language in `Settings` -> `App language`.
+> On first launch the interface follows the system language. Switch it in `Settings` (`Cmd+,`) -> `App language`.
 
-1. Click `Open subtitles` or drag a subtitle file into the input area.
-2. Choose the output folder.
+1. Click `Open subtitles` (`Cmd+O`) or drag a subtitle file into the input area.
+2. Choose the output folder. It is remembered between launches.
 3. Select one or more export formats: `ASS`, `SRT`, `VTT`, or `DOCX`.
-4. Click `Start`.
-5. To create a role-assignment DOCX, load a file with roles and click `Make role assignment`.
+4. Check the roles you need in the role list if you export separate SRT files per role.
+5. Click `Start`. A long run can be stopped with `Cancel`.
+6. To create a role-assignment DOCX, load a file with roles and click `Make role assignment`.
+
+Existing files are never overwritten: a numbered suffix is added to the new file instead.
 
 ## DOCX Output
 
