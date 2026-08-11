@@ -9,7 +9,7 @@ struct AVTHelperApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1040, minHeight: 720)
+                .frame(minWidth: 900, minHeight: 640)
         }
         .windowStyle(.titleBar)
         .commands {
@@ -176,6 +176,13 @@ struct ContentView: View {
         L.text(key, language)
     }
 
+    /// папка выгрузки существует и задана абсолютным путём: относительный путь создал бы папку неизвестно где
+    private var outputFolderExists: Bool {
+        var isDirectory: ObjCBool = false
+        let exists: Bool = FileManager.default.fileExists(atPath: outputFolder, isDirectory: &isDirectory)
+        return outputFolder.hasPrefix("/") && exists && isDirectory.boolValue
+    }
+
     /// причина, по которой запуск невозможен; nil означает, что всё готово
     private var startBlockReason: String? {
         if model.importedSubtitle == nil {
@@ -184,30 +191,28 @@ struct ContentView: View {
         if !exportAss && !exportSrt && !exportVtt && !exportDocx {
             return t("hint.selectFormat")
         }
+        if !outputFolderExists {
+            return t("hint.badOutputFolder")
+        }
         return nil
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                Grid(alignment: .top, horizontalSpacing: 14, verticalSpacing: 14) {
-                    GridRow {
-                        headerPanel
-                            .gridCellColumns(3)
-                    }
+            ScrollView(.vertical) {
+                VStack(spacing: 14) {
+                    headerPanel
 
-                    GridRow {
+                    HStack(alignment: .top, spacing: 14) {
                         pathsPanel
                         exportPanel
                         srtPanel
                     }
 
-                    GridRow {
-                        rolesPanel
-                            .gridCellColumns(3)
-                    }
+                    rolesPanel
                 }
                 .padding(18)
+                .frame(maxWidth: .infinity)
             }
 
             HStack(spacing: 10) {
@@ -281,6 +286,7 @@ struct ContentView: View {
                     .font(.largeTitle.weight(.bold))
                 Text("ASS / SSA / SRT / VTT / SRP → ASS / SRT / VTT / DOCX")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button(t("openSubtitles")) {
                         chooseInputFile()
@@ -298,6 +304,7 @@ struct ContentView: View {
                         showRoleAssignment = true
                     }
                     .disabled(model.importedSubtitle == nil || model.roles.isEmpty)
+                    Spacer(minLength: 0)
                 }
                 .disabled(model.isWorking)
             }
@@ -350,19 +357,28 @@ struct ContentView: View {
                     HStack {
                         Toggle(isOn: roleSelection(role)) {
                             Text(role)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                         .toggleStyle(.checkbox)
-                        Spacer()
+                        Spacer(minLength: 12)
                         Text("\(model.roleCounts[role, default: 0]) \(t("lineCountSuffix"))")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
                 }
                 .frame(height: 240)
+                .overlay {
+                    if model.roles.isEmpty {
+                        Text(t("roles.empty"))
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 Text(t("rolesSelectionHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -395,6 +411,12 @@ struct ContentView: View {
                     .textFieldStyle(.roundedBorder)
                     .labelsHidden()
                     .accessibilityLabel(t("outputFolder"))
+                if !outputFolderExists {
+                    Label(t("hint.badOutputFolder"), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text("\(t("source")): \(model.importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
                     .fontWeight(.semibold)
             }
@@ -405,6 +427,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(inputPath.isEmpty ? t("dropHint") : inputPath)
                 .lineLimit(3)
+                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("ASS, SSA, SRT, VTT, SRP")

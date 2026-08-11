@@ -70,6 +70,14 @@ enum L {
         "history.empty": [.ru: "Пока пусто.", .en: "Nothing yet."],
         "hint.selectInput": [.ru: "Сначала выберите исходный файл.", .en: "Select a source file first."],
         "hint.selectFormat": [.ru: "Отметьте хотя бы один формат экспорта.", .en: "Check at least one export format."],
+        "hint.badOutputFolder": [
+            .ru: "Папка выгрузки не найдена. Выберите существующую папку.",
+            .en: "The output folder does not exist. Choose an existing folder.",
+        ],
+        "roles.empty": [
+            .ru: "Роли появятся после импорта файла",
+            .en: "Roles appear after a file is imported",
+        ],
         "dropSingleFileOnly": [
             .ru: "Обрабатывается только первый из перетащенных файлов.",
             .en: "Only the first dropped file is processed.",
