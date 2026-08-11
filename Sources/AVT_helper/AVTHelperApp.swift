@@ -52,27 +52,46 @@ final class ProcessingModel: ObservableObject {
     @Published var roles: [String] = []
     @Published var status: String = ""
     @Published var isWorking: Bool = false
+    @Published var progress: Double = 0
     @Published var lastCreatedFiles: [String] = []
+
+    private var cancelCurrentWork: (() -> Void)?
 
     func log(_ message: String) {
         status = message
     }
 
+    /// прерывает текущий импорт или экспорт
+    func cancel() {
+        cancelCurrentWork?()
+    }
+
     func importFile(path: String, language: AppLanguage) async {
         isWorking = true
+        progress = 0
+        let work: Task<ImportedSubtitle, Error> = Task.detached(priority: .userInitiated) { [weak self] in
+            try SubtitleImporter.importFile(path: path, language: language) { fraction in
+                Task { @MainActor in
+                    self?.progress = fraction
+                }
+            }
+        }
+        cancelCurrentWork = { work.cancel() }
         do {
-            let imported: ImportedSubtitle = try await Task.detached(priority: .userInitiated) {
-                try SubtitleImporter.importFile(path: path, language: language)
-            }.value
+            let imported: ImportedSubtitle = try await work.value
             importedSubtitle = imported
             roles = imported.allRoles(language)
             status = "\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue)."
+        } catch is CancellationError {
+            importedSubtitle = nil
+            roles = []
+            status = L.text("cancelled", language)
         } catch {
             importedSubtitle = nil
             roles = []
             status = L.describe(error, language)
         }
-        isWorking = false
+        finishWork()
     }
 
     func export(outputFolder: String, settings: ExportSettings, language: AppLanguage) async -> Bool {
@@ -81,19 +100,34 @@ final class ProcessingModel: ObservableObject {
             return false
         }
         isWorking = true
+        progress = 0
+        let work: Task<[String], Error> = Task.detached(priority: .userInitiated) { [weak self] in
+            try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language) { fraction in
+                Task { @MainActor in
+                    self?.progress = fraction
+                }
+            }
+        }
+        cancelCurrentWork = { work.cancel() }
         var succeeded: Bool = false
         do {
-            let created: [String] = try await Task.detached(priority: .userInitiated) {
-                try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language)
-            }.value
+            let created: [String] = try await work.value
             lastCreatedFiles = created
             status = "\(L.text("ready", language)). \(L.text("createdFiles", language)): \(created.count)"
             succeeded = true
+        } catch is CancellationError {
+            status = L.text("cancelled", language)
         } catch {
             status = L.describe(error, language)
         }
-        isWorking = false
+        finishWork()
         return succeeded
+    }
+
+    private func finishWork() {
+        cancelCurrentWork = nil
+        isWorking = false
+        progress = 0
     }
 }
 
@@ -148,10 +182,15 @@ struct ContentView: View {
                 .padding(18)
             }
 
-            HStack {
+            HStack(spacing: 10) {
                 if model.isWorking {
-                    ProgressView()
-                        .controlSize(.small)
+                    ProgressView(value: model.progress)
+                        .frame(width: 130)
+                    Text("\(Int(model.progress * 100))%")
+                        .monospacedDigit()
+                    Button(t("cancel")) {
+                        model.cancel()
+                    }
                 }
                 Text(model.status.isEmpty ? t("ready") : model.status)
                     .lineLimit(2)

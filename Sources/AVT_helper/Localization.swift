@@ -59,6 +59,8 @@ enum L {
         "separateByRole": [.ru: "Отдельные файлы по ролям", .en: "Separate files by role"],
         "separateWithPrefix": [.ru: "Отдельные файлы с префиксом роли", .en: "Separate files with role prefix"],
         "rolesForSeparateExport": [.ru: "Роли для раздельной выгрузки", .en: "Roles for separate export"],
+        "cancel": [.ru: "Отменить", .en: "Cancel"],
+        "cancelled": [.ru: "Операция отменена.", .en: "Operation cancelled."],
         "done": [.ru: "Готово!", .en: "Done!"],
         "ok": [.ru: "OK", .en: "OK"],
         "ready": [.ru: "Готово", .en: "Ready"],

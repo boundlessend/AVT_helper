@@ -9,26 +9,49 @@ enum DocxExporter {
         paths: inout OutputPathAllocator,
         roleHighlights: [String: WordHighlightColor] = [:],
         voiceSummaries: [VoiceRoleSummary] = [],
-        fileSuffix: String = ""
+        fileSuffix: String = "",
+        progress: @escaping ProgressHandler = { _ in }
     ) throws -> String {
         let name: String = "\(TextTools.safeFileName(subtitle.baseName))\(fileSuffix)"
         let outputPath: String = paths.reserve(folder: outputFolder, name: name, fileExtension: "docx")
-        let entries: [ZipArchive.Entry] = docxEntries(
+        var counter: ProgressCounter = ProgressCounter(total: subtitle.lines.count, report: progress)
+        try write(
+            path: outputPath,
             subtitle: subtitle,
             language: language,
+            counter: &counter,
             roleHighlights: roleHighlights,
             voiceSummaries: voiceSummaries
         )
-        try ZipArchive.archive(entries: entries).write(to: URL(fileURLWithPath: outputPath))
         return outputPath
+    }
+
+    /// пишет docx по готовому пути, отчитываясь о прогрессе общим счётчиком экспорта
+    static func write(
+        path: String,
+        subtitle: ImportedSubtitle,
+        language: AppLanguage,
+        counter: inout ProgressCounter,
+        roleHighlights: [String: WordHighlightColor] = [:],
+        voiceSummaries: [VoiceRoleSummary] = []
+    ) throws {
+        let entries: [ZipArchive.Entry] = try docxEntries(
+            subtitle: subtitle,
+            language: language,
+            roleHighlights: roleHighlights,
+            voiceSummaries: voiceSummaries,
+            counter: &counter
+        )
+        try ZipArchive.archive(entries: entries).write(to: URL(fileURLWithPath: path))
     }
 
     private static func docxEntries(
         subtitle: ImportedSubtitle,
         language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
-        voiceSummaries: [VoiceRoleSummary]
-    ) -> [ZipArchive.Entry] {
+        voiceSummaries: [VoiceRoleSummary],
+        counter: inout ProgressCounter
+    ) throws -> [ZipArchive.Entry] {
         [
             ZipArchive.Entry(path: "[Content_Types].xml", data: Data(contentTypes().utf8)),
             ZipArchive.Entry(path: "_rels/.rels", data: Data(rootRels().utf8)),
@@ -38,11 +61,12 @@ enum DocxExporter {
             ZipArchive.Entry(
                 path: "word/document.xml",
                 data: Data(
-                    documentXml(
+                    try documentXml(
                         subtitle: subtitle,
                         language: language,
                         roleHighlights: roleHighlights,
-                        voiceSummaries: voiceSummaries
+                        voiceSummaries: voiceSummaries,
+                        counter: &counter
                     ).utf8
                 )
             ),
@@ -54,17 +78,20 @@ enum DocxExporter {
         subtitle: ImportedSubtitle,
         language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
-        voiceSummaries: [VoiceRoleSummary]
-    ) -> String {
-        let rows: String = subtitle.lines.map { line in
+        voiceSummaries: [VoiceRoleSummary],
+        counter: inout ProgressCounter
+    ) throws -> String {
+        var rows: String = ""
+        for line in subtitle.lines {
+            try counter.step()
             let roles: [String] = line.displayRoles(language)
-            return tableRow(
+            rows += tableRow(
                 timing: TimeTools.formatClockSeconds(line.start),
                 role: roles.joined(separator: " / "),
                 replica: line.text,
                 roleHighlight: highlightForRoles(roles, roleHighlights: roleHighlights)
             )
-        }.joined()
+        }
 
         let rolesLine: String = subtitle.allRoles(language).joined(separator: ", ")
         let voiceSummaryXml: String = voiceSummaries.map { summary in

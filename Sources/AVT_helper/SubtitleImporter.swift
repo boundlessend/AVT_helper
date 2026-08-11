@@ -2,7 +2,7 @@ import Foundation
 
 enum SubtitleImporter {
     /// импортирует поддерживаемый файл субтитров и нормализует реплики по времени
-    static func importFile(path: String, language: AppLanguage) throws -> ImportedSubtitle {
+    static func importFile(path: String, language: AppLanguage, progress: @escaping ProgressHandler = { _ in }) throws -> ImportedSubtitle {
         let url: URL = URL(fileURLWithPath: path)
         let sourceType: SubtitleSourceType = try detect(path: path)
         try validateFile(url: url, language: language)
@@ -11,13 +11,13 @@ enum SubtitleImporter {
 
         switch sourceType {
         case .ass, .ssa:
-            lines = try importAss(text: text)
+            lines = try importAss(text: text, progress: progress)
         case .srt:
-            lines = try importSrt(text: text)
+            lines = try importSrt(text: text, progress: progress)
         case .vtt:
-            lines = try importVtt(text: text)
+            lines = try importVtt(text: text, progress: progress)
         case .srp:
-            lines = try importSrp(text: text)
+            lines = try importSrp(text: text, progress: progress)
         }
 
         return ImportedSubtitle(
@@ -99,8 +99,11 @@ enum SubtitleImporter {
         return String.Encoding(rawValue: raw)
     }()
 
-    private static func importAss(text: String) throws -> [SubtitleLine] {
-        text.components(separatedBy: .newlines).compactMap { rawLine in
+    private static func importAss(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+        let rawLines: [String] = text.components(separatedBy: .newlines)
+        var counter: ProgressCounter = ProgressCounter(total: rawLines.count, report: progress)
+        return try rawLines.compactMap { rawLine in
+            try counter.step()
             guard rawLine.range(of: "Dialogue:", options: [.caseInsensitive, .anchored]) != nil else {
                 return nil
             }
@@ -130,9 +133,11 @@ enum SubtitleImporter {
         }
     }
 
-    private static func importSrt(text: String) throws -> [SubtitleLine] {
+    private static func importSrt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
         let blocks: [String] = normalizedBlocks(text: text)
-        return blocks.compactMap { block in
+        var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
+        return try blocks.compactMap { block in
+            try counter.step()
             let lines: [String] = block.components(separatedBy: "\n")
             guard let timeIndex: Int = lines.firstIndex(where: { line in line.contains("-->") }) else {
                 return nil
@@ -149,10 +154,12 @@ enum SubtitleImporter {
         }
     }
 
-    private static func importVtt(text: String) throws -> [SubtitleLine] {
+    private static func importVtt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
         let withoutHeader: String = text.replacingOccurrences(of: "\u{FEFF}", with: "")
         let blocks: [String] = normalizedBlocks(text: withoutHeader)
-        return blocks.compactMap { block in
+        var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
+        return try blocks.compactMap { block in
+            try counter.step()
             if block.uppercased().hasPrefix("WEBVTT") || block.uppercased().hasPrefix("NOTE") {
                 return nil
             }
@@ -177,11 +184,13 @@ enum SubtitleImporter {
         }
     }
 
-    private static func importSrp(text: String) throws -> [SubtitleLine] {
+    private static func importSrp(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
         let data: Data = Data(text.utf8)
         let document: XMLDocument = try XMLDocument(data: data, options: [.nodePreserveWhitespace])
         let nodes: [XMLNode] = try document.nodes(forXPath: "//DocumentElement")
-        return nodes.compactMap { node in
+        var counter: ProgressCounter = ProgressCounter(total: nodes.count, report: progress)
+        return try nodes.compactMap { node in
+            try counter.step()
             let roles: [String] = TextTools.normalizedRoles([childText(node: node, name: "Character")])
             let sex: String = TextTools.normalizeSex(childText(node: node, name: "Sex"))
             let rawText: String = childText(node: node, name: "Text")

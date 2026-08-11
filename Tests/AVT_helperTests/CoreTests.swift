@@ -3,6 +3,24 @@ import XCTest
 
 @testable import AVT_helper
 
+/// собирает значения прогресса, приходящие из фонового потока
+private final class Reported: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Double] = []
+
+    var values: [Double] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ value: Double) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
+    }
+}
+
 final class CoreTests: XCTestCase {
     private let cp1251: String.Encoding = {
         let raw = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.windowsCyrillic.rawValue))
@@ -208,6 +226,44 @@ final class CoreTests: XCTestCase {
         let reimported = try SubtitleImporter.importFile(path: created, language: .ru)
 
         XCTAssertEqual(reimported.lines.first?.text, "текст {в скобках} тут")
+    }
+
+    func testExportReportsProgressAndStopsWhenCancelled() async throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let lines = (0..<500).map { index in
+            SubtitleLine(
+                id: UUID(), start: TimeInterval(index), end: TimeInterval(index) + 1,
+                roles: ["Анна"], text: "строка \(index)", style: "", effect: "", sex: ""
+            )
+        }
+        let subtitle = ImportedSubtitle(baseName: "progress", sourcePath: "", sourceType: .srt, lines: lines)
+        let settings = ExportSettings(
+            exportAss: true, exportSrt: true, exportVtt: true, exportDocx: true,
+            srtFullWithRoles: false, srtSeparateFiles: false, srtSeparateWithRoles: false, selectedRoles: []
+        )
+
+        let reported = Reported()
+        _ = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru) { fraction in
+            reported.append(fraction)
+        }
+        let values = reported.values
+        XCTAssertFalse(values.isEmpty)
+        XCTAssertEqual(values.last ?? 0, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(values, values.sorted())
+
+        let cancelledDir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: cancelledDir) }
+        let work = Task.detached {
+            try SubtitleExporter.export(subtitle: subtitle, outputFolder: cancelledDir.path, settings: settings, language: .ru)
+        }
+        work.cancel()
+        do {
+            _ = try await work.value
+            XCTFail("отменённый экспорт завершился успешно")
+        } catch is CancellationError {
+            // отмена дошла до цикла записи
+        }
     }
 
     func testTextTools() {
