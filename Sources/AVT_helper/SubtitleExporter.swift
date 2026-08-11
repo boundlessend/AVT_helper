@@ -134,7 +134,7 @@ enum SubtitleExporter {
         }
 
         if settings.srtSeparateFiles || settings.srtSeparateWithRoles {
-            let roles: [String] = settings.selectedRoles.isEmpty ? subtitle.allRoles(language) : Array(settings.selectedRoles).sorted()
+            let roles: [String] = Array(settings.selectedRoles).sorted()
             for role in roles {
                 let roleLines: [SubtitleLine] = subtitle.lines.filter { line in
                     line.displayRoles(language).contains { current in current.caseInsensitiveCompare(role) == .orderedSame }

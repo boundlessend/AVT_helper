@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AboutWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)
@@ -13,7 +13,7 @@ struct AboutWindow: View {
 }
 
 struct QAWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)
@@ -25,7 +25,7 @@ struct QAWindow: View {
 }
 
 struct SettingsWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
 
     var body: some View {
         SettingsView(languageRaw: $appLanguageRaw)
@@ -179,7 +179,6 @@ struct QAView: View {
 
 struct SettingsView: View {
     @Binding var languageRaw: String
-    @Environment(\.dismiss) private var dismiss
 
     private var language: AppLanguage {
         AppLanguage.resolve(languageRaw)
@@ -187,12 +186,8 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            WindowHeader(
-                title: L.text("settings", language),
-                systemImage: "gearshape",
-                closeTitle: L.text("close", language),
-                onClose: { dismiss() }
-            )
+            Label(L.text("settings", language), systemImage: "gearshape")
+                .font(.title2.weight(.bold))
 
             Picker(L.text("settings.language", language), selection: $languageRaw) {
                 ForEach(AppLanguage.allCases) { item in

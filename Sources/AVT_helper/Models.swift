@@ -18,6 +18,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    /// язык для первого запуска: берётся из системных предпочтений, всё нерусское считается английским
+    static var systemDefault: AppLanguage {
+        let preferred: String = Locale.preferredLanguages.first ?? "ru"
+        return preferred.hasPrefix("ru") ? .ru : .en
+    }
+
     /// разбирает сырое значение из настроек, падая в русский по умолчанию
     static func resolve(_ raw: String?) -> AppLanguage {
         guard let raw: String = raw, let language: AppLanguage = AppLanguage(rawValue: raw) else {

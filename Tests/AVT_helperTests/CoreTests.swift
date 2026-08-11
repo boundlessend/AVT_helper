@@ -180,7 +180,7 @@ final class CoreTests: XCTestCase {
         )
         let settings = ExportSettings(
             exportAss: false, exportSrt: true, exportVtt: false, exportDocx: false,
-            srtFullWithRoles: false, srtSeparateFiles: true, srtSeparateWithRoles: false, selectedRoles: []
+            srtFullWithRoles: false, srtSeparateFiles: true, srtSeparateWithRoles: false, selectedRoles: ["A:B", "A*B"]
         )
 
         let created = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru)

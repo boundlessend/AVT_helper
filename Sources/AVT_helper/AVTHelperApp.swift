@@ -30,13 +30,16 @@ struct AVTHelperApp: App {
         .defaultSize(width: 520, height: 340)
         .windowResizability(.contentSize)
 
-        Window("Settings", id: "settings") {
+        Settings {
             SettingsWindow()
-                .frame(width: 380, height: 190)
+                .frame(width: 380, height: 160)
         }
-        .defaultSize(width: 380, height: 190)
-        .windowResizability(.contentSize)
     }
+}
+
+extension Notification.Name {
+    /// пункт меню «Открыть субтитры» просит главное окно показать диалог выбора файла
+    static let openSubtitleFile = Notification.Name("app.openSubtitleFile")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -50,15 +53,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class ProcessingModel: ObservableObject {
     @Published var importedSubtitle: ImportedSubtitle?
     @Published var roles: [String] = []
+    @Published var roleCounts: [String: Int] = [:]
     @Published var status: String = ""
     @Published var isWorking: Bool = false
     @Published var progress: Double = 0
     @Published var lastCreatedFiles: [String] = []
+    /// последние сообщения статуса: без журнала ошибка исчезает под следующим же событием
+    @Published private(set) var history: [String] = []
 
     private var cancelCurrentWork: (() -> Void)?
 
     func log(_ message: String) {
         status = message
+        history.append(message)
+        if history.count > 50 {
+            history.removeFirst(history.count - 50)
+        }
     }
 
     /// прерывает текущий импорт или экспорт
@@ -81,22 +91,21 @@ final class ProcessingModel: ObservableObject {
             let imported: ImportedSubtitle = try await work.value
             importedSubtitle = imported
             roles = imported.allRoles(language)
-            status = "\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue)."
+            roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: language)
+            log("\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue).")
         } catch is CancellationError {
-            importedSubtitle = nil
-            roles = []
-            status = L.text("cancelled", language)
+            forgetInput()
+            log(L.text("cancelled", language))
         } catch {
-            importedSubtitle = nil
-            roles = []
-            status = L.describe(error, language)
+            forgetInput()
+            log(L.describe(error, language))
         }
         finishWork()
     }
 
     func export(outputFolder: String, settings: ExportSettings, language: AppLanguage) async -> Bool {
         guard let subtitle: ImportedSubtitle = importedSubtitle else {
-            status = SubtitleError.exportFailed(L.text("error.noInputSelected", language)).message(language)
+            log(SubtitleError.exportFailed(L.text("error.noInputSelected", language)).message(language))
             return false
         }
         isWorking = true
@@ -113,15 +122,21 @@ final class ProcessingModel: ObservableObject {
         do {
             let created: [String] = try await work.value
             lastCreatedFiles = created
-            status = "\(L.text("ready", language)). \(L.text("createdFiles", language)): \(created.count)"
+            log("\(L.text("ready", language)). \(L.text("createdFiles", language)): \(created.count)")
             succeeded = true
         } catch is CancellationError {
-            status = L.text("cancelled", language)
+            log(L.text("cancelled", language))
         } catch {
-            status = L.describe(error, language)
+            log(L.describe(error, language))
         }
         finishWork()
         return succeeded
+    }
+
+    private func forgetInput() {
+        importedSubtitle = nil
+        roles = []
+        roleCounts = [:]
     }
 
     private func finishWork() {
@@ -132,13 +147,15 @@ final class ProcessingModel: ObservableObject {
 }
 
 struct ContentView: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
     @StateObject private var model: ProcessingModel = ProcessingModel()
     @State private var inputPath: String = ""
-    @State private var outputFolder: String = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path ?? NSHomeDirectory()
+    @AppStorage("outputFolder") private var outputFolder: String =
+        FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
+        ?? NSHomeDirectory()
     @State private var selectedRoles: Set<String> = []
     @AppStorage("exportAss") private var exportAss: Bool = false
-    @AppStorage("exportSrt") private var exportSrt: Bool = false
+    @AppStorage("exportSrt") private var exportSrt: Bool = true
     @AppStorage("exportVtt") private var exportVtt: Bool = false
     @AppStorage("exportDocx") private var exportDocx: Bool = false
     @AppStorage("srtFullWithRoles") private var srtFullWithRoles: Bool = false
@@ -148,6 +165,7 @@ struct ContentView: View {
     @AppStorage("closeProgramAfterProcessing") private var closeProgramAfterProcessing: Bool = false
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
+    @State private var showHistory: Bool = false
     @State private var isDropTargeted: Bool = false
 
     private var language: AppLanguage {
@@ -158,20 +176,30 @@ struct ContentView: View {
         L.text(key, language)
     }
 
+    /// причина, по которой запуск невозможен; nil означает, что всё готово
+    private var startBlockReason: String? {
+        if model.importedSubtitle == nil {
+            return t("hint.selectInput")
+        }
+        if !exportAss && !exportSrt && !exportVtt && !exportDocx {
+            return t("hint.selectFormat")
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 Grid(alignment: .top, horizontalSpacing: 14, verticalSpacing: 14) {
                     GridRow {
                         headerPanel
-                            .gridCellColumns(2)
-                        roleSelectionPanel
+                            .gridCellColumns(3)
                     }
 
                     GridRow {
                         pathsPanel
                         exportPanel
-                        docxPanel
+                        srtPanel
                     }
 
                     GridRow {
@@ -192,8 +220,18 @@ struct ContentView: View {
                         model.cancel()
                     }
                 }
-                Text(model.status.isEmpty ? t("ready") : model.status)
-                    .lineLimit(2)
+                Button {
+                    showHistory = true
+                } label: {
+                    Text(model.status.isEmpty ? t("ready") : model.status)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .help(t("history.hint"))
+                .popover(isPresented: $showHistory, arrowEdge: .top) {
+                    historyPopover
+                }
                 Spacer()
                 Text("@boundlessend")
                     .fontWeight(.semibold)
@@ -203,16 +241,21 @@ struct ContentView: View {
             .padding(.vertical, 10)
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { _ in
+            if !model.isWorking {
+                chooseInputFile()
+            }
+        }
         .alert(t("done"), isPresented: $showDoneAlert) {
+            Button(t("showInFinder")) {
+                revealCreatedFiles()
+                completeProcessing()
+            }
             Button(t("ok")) {
                 completeProcessing()
             }
         } message: {
-            Text(
-                model.lastCreatedFiles
-                    .map { path in URL(fileURLWithPath: path).lastPathComponent }
-                    .joined(separator: "\n")
-            )
+            Text(createdFilesSummary)
         }
         .sheet(isPresented: $showRoleAssignment) {
             if let subtitle: ImportedSubtitle = model.importedSubtitle {
@@ -249,6 +292,8 @@ struct ContentView: View {
                         runExport()
                     }
                     .keyboardShortcut(.return)
+                    .disabled(startBlockReason != nil)
+                    .help(startBlockReason ?? t("start"))
                     Button(t("makeRoleAssignment")) {
                         showRoleAssignment = true
                     }
@@ -259,17 +304,81 @@ struct ContentView: View {
         }
     }
 
+    /// журнал сообщений: в статус-баре видно только последнее, а ошибка нужна и после следующего события
+    private var historyPopover: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(t("history"))
+                .font(.headline)
+            if model.history.isEmpty {
+                Text(t("history.empty"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(model.history.enumerated().reversed()), id: \.offset) { item in
+                            Text(item.element)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .frame(height: 180)
+            }
+        }
+        .font(.footnote)
+        .padding(12)
+        .frame(width: 420)
+    }
+
     private var rolesPanel: some View {
         panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("assignedRoles"))
-                    .font(.headline)
-                List(model.roles, id: \.self) { role in
-                    Text(role)
+                HStack {
+                    Text("\(t("roles")) (\(model.roles.count))")
+                        .font(.headline)
+                    Spacer()
+                    Button(t("selectAll")) {
+                        selectedRoles = Set(model.roles)
+                    }
+                    Button(t("selectNone")) {
+                        selectedRoles = []
+                    }
                 }
-                .frame(height: 220)
+                .disabled(model.roles.isEmpty)
+
+                List(model.roles, id: \.self) { role in
+                    HStack {
+                        Toggle(isOn: roleSelection(role)) {
+                            Text(role)
+                        }
+                        .toggleStyle(.checkbox)
+                        Spacer()
+                        Text("\(model.roleCounts[role, default: 0]) \(t("lineCountSuffix"))")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .frame(height: 240)
+
+                Text(t("rolesSelectionHint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// чекбокс роли: набор выбранных ролей нужен раздельному экспорту SRT
+    private func roleSelection(_ role: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedRoles.contains(role) },
+            set: { isOn in
+                if isOn {
+                    selectedRoles.insert(role)
+                } else {
+                    selectedRoles.remove(role)
+                }
+            }
+        )
     }
 
     private var pathsPanel: some View {
@@ -282,8 +391,10 @@ struct ContentView: View {
                 inputDropZone
                 Text(t("outputFolder"))
                     .foregroundStyle(.secondary)
-                TextField("", text: $outputFolder)
+                TextField(t("outputFolder"), text: $outputFolder)
                     .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .accessibilityLabel(t("outputFolder"))
                 Text("\(t("source")): \(model.importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
                     .fontWeight(.semibold)
             }
@@ -309,9 +420,12 @@ struct ContentView: View {
                 .foregroundStyle(isDropTargeted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
-            handleInputDrop(providers: providers)
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDroppedFiles(urls)
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
+        .accessibilityLabel(t("inputFile"))
     }
 
     private var exportPanel: some View {
@@ -330,29 +444,14 @@ struct ContentView: View {
         }
     }
 
-    private var docxPanel: some View {
+    private var srtPanel: some View {
         panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("settings"))
-                    .font(.headline)
                 Text(t("srtSettings"))
                     .font(.headline)
                 Toggle(t("fullWithRoles"), isOn: $srtFullWithRoles)
                 Toggle(t("separateByRole"), isOn: $srtSeparateFiles)
                 Toggle(t("separateWithPrefix"), isOn: $srtSeparateWithRoles)
-            }
-        }
-    }
-
-    private var roleSelectionPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("rolesForSeparateExport"))
-                    .font(.headline)
-                List(model.roles, id: \.self, selection: $selectedRoles) { role in
-                    Text(role)
-                }
-                .frame(height: 132)
             }
         }
     }
@@ -393,7 +492,27 @@ struct ContentView: View {
         selectedRoles = []
         Task {
             await model.importFile(path: path, language: language)
+            selectedRoles = Set(model.roles)
         }
+    }
+
+    /// имена созданных файлов для алерта; длинный список сворачивается, иначе он не влезает на экран
+    private var createdFilesSummary: String {
+        let names: [String] = model.lastCreatedFiles.map { path in URL(fileURLWithPath: path).lastPathComponent }
+        let shown: [String] = Array(names.prefix(10))
+        let hidden: Int = names.count - shown.count
+        if hidden <= 0 {
+            return shown.joined(separator: "\n")
+        }
+        return (shown + [L.format("createdFilesMore", language, ["n": String(hidden)])]).joined(separator: "\n")
+    }
+
+    private func revealCreatedFiles() {
+        let urls: [URL] = model.lastCreatedFiles.map { path in URL(fileURLWithPath: path) }
+        if urls.isEmpty {
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     private func runExport() {
@@ -414,45 +533,17 @@ struct ContentView: View {
         }
     }
 
-    private func handleInputDrop(providers: [NSItemProvider]) -> Bool {
-        guard
-            let provider: NSItemProvider = providers.first(where: { item in
-                item.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-            })
-        else {
+    /// принимает перетащенный файл; при нескольких файлах берётся первый и об этом говорится вслух
+    private func handleDroppedFiles(_ urls: [URL]) -> Bool {
+        guard let first: URL = urls.first else {
+            model.log(t("dropReadError"))
             return false
         }
-
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-            if let error {
-                DispatchQueue.main.async {
-                    model.log(error.localizedDescription)
-                }
-                return
-            }
-
-            let url: URL?
-            if let data: Data = item as? Data,
-                let text: String = String(data: data, encoding: .utf8)
-            {
-                url = URL(string: text)
-            } else {
-                url = item as? URL
-            }
-
-            guard let path: String = url?.path else {
-                DispatchQueue.main.async {
-                    model.log(t("dropReadError"))
-                }
-                return
-            }
-
-            DispatchQueue.main.async {
-                inputPath = path
-                reloadInput(path: path)
-            }
+        if urls.count > 1 {
+            model.log(t("dropSingleFileOnly"))
         }
-
+        inputPath = first.path
+        reloadInput(path: first.path)
         return true
     }
 
@@ -468,7 +559,7 @@ struct ContentView: View {
 }
 
 struct AppMenuCommands: Commands {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.ru.rawValue
+    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
     @Environment(\.openWindow) private var openWindow
 
     private var language: AppLanguage {
@@ -476,6 +567,13 @@ struct AppMenuCommands: Commands {
     }
 
     var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button(L.text("openSubtitles", language)) {
+                NotificationCenter.default.post(name: .openSubtitleFile, object: nil)
+            }
+            .keyboardShortcut("o")
+        }
+
         CommandGroup(replacing: .appInfo) {
             Button {
                 openWindow(id: "about")
@@ -486,11 +584,6 @@ struct AppMenuCommands: Commands {
                 openWindow(id: "qa")
             } label: {
                 Label(L.text("qa", language), systemImage: "questionmark.circle")
-            }
-            Button {
-                openWindow(id: "settings")
-            } label: {
-                Label(L.text("settings", language), systemImage: "gearshape")
             }
         }
     }
