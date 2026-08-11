@@ -127,15 +127,14 @@ struct TimeParts {
     let milliseconds: Int
 }
 
-enum SubtitleError: LocalizedError {
+enum SubtitleError: Error {
     case unsupportedFormat(String)
     case invalidTime(String)
+    /// сообщение уже локализовано в месте выброса
     case importFailed(String)
     case exportFailed(String)
 
-    /// сообщения локализуются по текущему языку приложения, прочитанному из настроек
-    var errorDescription: String? {
-        let language: AppLanguage = AppLanguage.current
+    func message(_ language: AppLanguage) -> String {
         switch self {
         case .unsupportedFormat(let path):
             return "\(L.text("error.unsupportedFormat", language)): \(path)"

@@ -5,13 +5,19 @@ enum DocxExporter {
     static func export(
         subtitle: ImportedSubtitle,
         outputFolder: String,
+        language: AppLanguage,
         roleHighlights: [String: WordHighlightColor] = [:],
         voiceSummaries: [VoiceRoleSummary] = [],
         fileSuffix: String = ""
     ) throws -> String {
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
         let outputPath: String = URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase)\(fileSuffix).docx").path
-        let entries: [ZipArchive.Entry] = docxEntries(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries)
+        let entries: [ZipArchive.Entry] = docxEntries(
+            subtitle: subtitle,
+            language: language,
+            roleHighlights: roleHighlights,
+            voiceSummaries: voiceSummaries
+        )
         let archive: Data = ZipArchive.archive(entries: entries)
         if FileManager.default.fileExists(atPath: outputPath) {
             try FileManager.default.removeItem(atPath: outputPath)
@@ -22,6 +28,7 @@ enum DocxExporter {
 
     private static func docxEntries(
         subtitle: ImportedSubtitle,
+        language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
         voiceSummaries: [VoiceRoleSummary]
     ) -> [ZipArchive.Entry] {
@@ -33,7 +40,14 @@ enum DocxExporter {
             ZipArchive.Entry(path: "docProps/core.xml", data: Data(coreProps().utf8)),
             ZipArchive.Entry(
                 path: "word/document.xml",
-                data: Data(documentXml(subtitle: subtitle, roleHighlights: roleHighlights, voiceSummaries: voiceSummaries).utf8)
+                data: Data(
+                    documentXml(
+                        subtitle: subtitle,
+                        language: language,
+                        roleHighlights: roleHighlights,
+                        voiceSummaries: voiceSummaries
+                    ).utf8
+                )
             ),
             ZipArchive.Entry(path: "word/styles.xml", data: Data(stylesXml().utf8)),
         ]
@@ -41,25 +55,25 @@ enum DocxExporter {
 
     private static func documentXml(
         subtitle: ImportedSubtitle,
+        language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
         voiceSummaries: [VoiceRoleSummary]
     ) -> String {
         let rows: String = subtitle.lines.map { line in
-            let lineHighlight: WordHighlightColor? = highlightForRoles(line.effectiveRoles, roleHighlights: roleHighlights)
+            let roles: [String] = line.displayRoles(language)
             return tableRow(
                 timing: TimeTools.formatClockSeconds(line.start),
-                role: line.effectiveRoles.joined(separator: " / "),
+                role: roles.joined(separator: " / "),
                 replica: line.text,
-                roleHighlight: lineHighlight
+                roleHighlight: highlightForRoles(roles, roleHighlights: roleHighlights)
             )
         }.joined()
 
-        let language: AppLanguage = AppLanguage.current
-        let rolesLine: String = subtitle.allRoles.joined(separator: ", ")
+        let rolesLine: String = subtitle.allRoles(language).joined(separator: ", ")
         let voiceSummaryXml: String = voiceSummaries.map { summary in
             voiceSummaryParagraph(summary, language: language)
         }.joined()
-        let statistics: String = roleStatistics(subtitle: subtitle)
+        let statistics: String = roleStatistics(subtitle: subtitle, language: language)
         return """
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -101,10 +115,10 @@ enum DocxExporter {
         """
     }
 
-    private static func roleStatistics(subtitle: ImportedSubtitle) -> String {
+    private static func roleStatistics(subtitle: ImportedSubtitle, language: AppLanguage) -> String {
         var order: [String] = []
         var counts: [String: Int] = [:]
-        for role in subtitle.lines.flatMap({ line in line.effectiveRoles }) {
+        for role in subtitle.lines.flatMap({ line in line.displayRoles(language) }) {
             if let existing: String = order.first(where: { current in current.caseInsensitiveCompare(role) == .orderedSame }) {
                 counts[existing, default: 0] += 1
             } else {

@@ -50,49 +50,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class ProcessingModel: ObservableObject {
     @Published var importedSubtitle: ImportedSubtitle?
     @Published var roles: [String] = []
-    @Published var status: String = L.text("ready", AppLanguage.current)
+    @Published var status: String = ""
     @Published var isWorking: Bool = false
     @Published var lastCreatedFiles: [String] = []
-
-    private func t(_ key: String) -> String {
-        L.text(key, AppLanguage.current)
-    }
 
     func log(_ message: String) {
         status = message
     }
 
-    func importFile(path: String) async {
+    func importFile(path: String, language: AppLanguage) async {
         isWorking = true
         do {
             let imported: ImportedSubtitle = try await Task.detached(priority: .userInitiated) {
-                try SubtitleImporter.importFile(path: path)
+                try SubtitleImporter.importFile(path: path, language: language)
             }.value
             importedSubtitle = imported
-            roles = imported.allRoles
-            status = "\(t("imported")) \(imported.lines.count) \(t("lines")) \(imported.sourceType.rawValue)."
+            roles = imported.allRoles(language)
+            status = "\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue)."
         } catch {
-            status = error.localizedDescription
+            importedSubtitle = nil
+            roles = []
+            status = L.describe(error, language)
         }
         isWorking = false
     }
 
-    func export(outputFolder: String, settings: ExportSettings) async -> Bool {
+    func export(outputFolder: String, settings: ExportSettings, language: AppLanguage) async -> Bool {
         guard let subtitle: ImportedSubtitle = importedSubtitle else {
-            status = SubtitleError.exportFailed(L.text("error.noInputSelected", AppLanguage.current)).localizedDescription
+            status = SubtitleError.exportFailed(L.text("error.noInputSelected", language)).message(language)
             return false
         }
         isWorking = true
         var succeeded: Bool = false
         do {
             let created: [String] = try await Task.detached(priority: .userInitiated) {
-                try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings)
+                try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language)
             }.value
             lastCreatedFiles = created
-            status = "\(t("ready")). \(t("createdFiles")): \(created.count)"
+            status = "\(L.text("ready", language)). \(L.text("createdFiles", language)): \(created.count)"
             succeeded = true
         } catch {
-            status = error.localizedDescription
+            status = L.describe(error, language)
         }
         isWorking = false
         return succeeded
@@ -155,7 +153,7 @@ struct ContentView: View {
                     ProgressView()
                         .controlSize(.small)
                 }
-                Text(model.status)
+                Text(model.status.isEmpty ? t("ready") : model.status)
                     .lineLimit(2)
                 Spacer()
                 Text("@boundlessend")
@@ -358,7 +356,7 @@ struct ContentView: View {
     private func reloadInput(path: String) {
         selectedRoles = []
         Task {
-            await model.importFile(path: path)
+            await model.importFile(path: path, language: language)
         }
     }
 
@@ -374,7 +372,7 @@ struct ContentView: View {
             selectedRoles: selectedRoles
         )
         Task {
-            if await model.export(outputFolder: outputFolder, settings: settings) {
+            if await model.export(outputFolder: outputFolder, settings: settings, language: language) {
                 showDoneAlert = true
             }
         }

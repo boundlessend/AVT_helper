@@ -46,12 +46,11 @@ enum UpdateChecker {
     }
 }
 
-enum UpdateError: LocalizedError {
+enum UpdateError: Error {
     case badStatus(Int)
     case invalidResponse
 
-    var errorDescription: String? {
-        let language: AppLanguage = AppLanguage.current
+    func message(_ language: AppLanguage) -> String {
         switch self {
         case .badStatus(let code):
             return L.format("error.updateFailed", language, ["code": String(code)])

@@ -2,11 +2,11 @@ import Foundation
 
 enum SubtitleImporter {
     /// импортирует поддерживаемый файл субтитров и нормализует реплики по времени
-    static func importFile(path: String) throws -> ImportedSubtitle {
+    static func importFile(path: String, language: AppLanguage) throws -> ImportedSubtitle {
         let url: URL = URL(fileURLWithPath: path)
         let sourceType: SubtitleSourceType = try detect(path: path)
-        try validateFile(url: url)
-        let text: String = try readText(url: url)
+        try validateFile(url: url, language: language)
+        let text: String = try readText(url: url, language: language)
         let lines: [SubtitleLine]
 
         switch sourceType {
@@ -51,9 +51,8 @@ enum SubtitleImporter {
         }
     }
 
-    private static func validateFile(url: URL) throws {
+    private static func validateFile(url: URL, language: AppLanguage) throws {
         let values: URLResourceValues = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        let language: AppLanguage = AppLanguage.current
         if values.isRegularFile != true {
             throw SubtitleError.importFailed(L.format("error.notRegularFile", language, ["path": url.path]))
         }
@@ -70,7 +69,7 @@ enum SubtitleImporter {
     }
 
     /// читает файл, подбирая кодировку: BOM, затем UTF-8, Windows-1251 и Latin-1
-    private static func readText(url: URL) throws -> String {
+    private static func readText(url: URL, language: AppLanguage) throws -> String {
         let data: Data = try Data(contentsOf: url)
         if let bomDecoded: String = decodeByBom(data: data) {
             return bomDecoded
@@ -81,7 +80,7 @@ enum SubtitleImporter {
                 return text
             }
         }
-        throw SubtitleError.importFailed(L.text("error.decodeFailed", AppLanguage.current))
+        throw SubtitleError.importFailed(L.text("error.decodeFailed", language))
     }
 
     private static func decodeByBom(data: Data) -> String? {
@@ -118,13 +117,11 @@ enum SubtitleImporter {
             let name: String = String(parts[4]).trimmingCharacters(in: .whitespacesAndNewlines)
             let effect: String = String(parts[8]).trimmingCharacters(in: .whitespacesAndNewlines)
             let role: String = inferAssRole(name: name, style: style, effect: effect)
-            let cleanRole: String = TextTools.cleanRoleName(role)
             return SubtitleLine(
                 id: UUID(),
                 start: start,
                 end: end,
-                role: cleanRole,
-                roles: [cleanRole],
+                roles: TextTools.normalizedRoles([role]),
                 text: TextTools.cleanAssText(String(parts[9])),
                 style: style,
                 effect: effect,
@@ -185,7 +182,7 @@ enum SubtitleImporter {
         let document: XMLDocument = try XMLDocument(data: data, options: [.nodePreserveWhitespace])
         let nodes: [XMLNode] = try document.nodes(forXPath: "//DocumentElement")
         return nodes.compactMap { node in
-            let role: String = TextTools.cleanRoleName(childText(node: node, name: "Character"))
+            let roles: [String] = TextTools.normalizedRoles([childText(node: node, name: "Character")])
             let sex: String = TextTools.normalizeSex(childText(node: node, name: "Sex"))
             let rawText: String = childText(node: node, name: "Text")
                 .replacingOccurrences(of: "\\N", with: " ")
@@ -197,7 +194,7 @@ enum SubtitleImporter {
             else {
                 return nil
             }
-            return SubtitleLine(id: UUID(), start: start, end: end, role: role, roles: [role], text: rawText, style: "", effect: "", sex: sex)
+            return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: rawText, style: "", effect: "", sex: sex)
         }
     }
 
@@ -207,8 +204,7 @@ enum SubtitleImporter {
             let cleaned: String = TextTools.removeLeadingBracketRoles(rawText)
             return cleaned.isEmpty ? rawText : cleaned
         }()
-        let role: String = roles.first ?? Roles.unassigned
-        return SubtitleLine(id: UUID(), start: start, end: end, role: role, roles: roles.isEmpty ? [role] : roles, text: cleanText, style: "", effect: "", sex: "")
+        return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: cleanText, style: "", effect: "", sex: "")
     }
 
     private static func normalizedBlocks(text: String) -> [String] {
@@ -220,6 +216,7 @@ enum SubtitleImporter {
             .filter { block in !block.isEmpty }
     }
 
+    /// выбирает имя роли из полей строки Dialogue; пустая строка означает, что роль не распознана
     private static func inferAssRole(name: String, style: String, effect: String) -> String {
         if !name.isEmpty && !Roles.isUnassigned(name) {
             return name
@@ -227,10 +224,7 @@ enum SubtitleImporter {
         if !style.isEmpty && style.caseInsensitiveCompare("Default") != .orderedSame {
             return style
         }
-        if !effect.isEmpty {
-            return effect
-        }
-        return Roles.unassigned
+        return effect
     }
 
     private static func childText(node: XMLNode, name: String) -> String {

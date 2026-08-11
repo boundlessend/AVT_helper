@@ -1,14 +1,10 @@
 import Foundation
 
 enum TextTools {
+    /// нормализует имя роли; пустая строка на выходе означает, что имени фактически нет
     static func cleanRoleName(_ input: String) -> String {
-        let trimmed: String = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return Roles.unassigned
-        }
-
-        let replaced: String =
-            trimmed
+        input
+            .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: " , ", with: "_")
             .replacingOccurrences(of: " / ", with: "_")
             .replacingOccurrences(of: " \\ ", with: "_")
@@ -17,8 +13,19 @@ enum TextTools {
             .replacingOccurrences(of: "\\", with: "_")
             .replacingOccurrences(of: "?", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        return replaced.isEmpty ? Roles.unassigned : replaced
+    /// приводит список сырых имён к очищенным уникальным ролям без учёта регистра
+    static func normalizedRoles(_ input: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for name in input {
+            let role: String = cleanRoleName(name)
+            if !role.isEmpty && seen.insert(role.lowercased()).inserted {
+                result.append(role)
+            }
+        }
+        return result
     }
 
     static func cleanAssText(_ input: String) -> String {
@@ -53,16 +60,9 @@ enum TextTools {
             guard let groupRange: Range<String.Index> = Range(match.range(at: 1), in: input) else {
                 return nil
             }
-            return cleanRoleName(String(input[groupRange]))
+            return String(input[groupRange])
         }
-        return extracted.reduce(into: [String]()) { result, role in
-            let exists: Bool = result.contains { current in
-                current.caseInsensitiveCompare(role) == .orderedSame
-            }
-            if !role.isEmpty && !exists {
-                result.append(role)
-            }
-        }
+        return normalizedRoles(extracted)
     }
 
     static func removeLeadingBracketRoles(_ input: String) -> String {
@@ -83,14 +83,6 @@ enum TextTools {
     static func squareRolePrefix(_ roles: [String]) -> String {
         roles
             .filter { role in !role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .reduce(into: [String]()) { result, role in
-                let exists: Bool = result.contains { current in
-                    current.caseInsensitiveCompare(role) == .orderedSame
-                }
-                if !exists {
-                    result.append(role)
-                }
-            }
             .map { role in "[\(role)]" }
             .joined()
     }

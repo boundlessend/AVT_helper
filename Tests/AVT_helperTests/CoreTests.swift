@@ -40,9 +40,9 @@ final class CoreTests: XCTestCase {
         try body.data(using: .utf8)?.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let imported = try SubtitleImporter.importFile(path: url.path)
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
         XCTAssertEqual(imported.lines.count, 1)
-        XCTAssertEqual(imported.lines.first?.role, "Анна")
+        XCTAssertEqual(imported.lines.first?.roles.first, "Анна")
         XCTAssertEqual(imported.lines.first?.text, "Привет,\nмир")
         XCTAssertEqual(imported.lines.first?.start ?? 0, 1, accuracy: 0.0001)
     }
@@ -60,10 +60,10 @@ final class CoreTests: XCTestCase {
         try body.data(using: .utf8)?.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let imported = try SubtitleImporter.importFile(path: url.path)
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
         XCTAssertEqual(imported.lines.count, 1)
         XCTAssertEqual(imported.lines.first?.text, "Привет")
-        XCTAssertTrue(imported.allRoles.contains("Анна"))
+        XCTAssertTrue(imported.allRoles(.ru).contains("Анна"))
     }
 
     func testAssignRolesRespectsGenderAndLoad() throws {
@@ -73,7 +73,7 @@ final class CoreTests: XCTestCase {
             (0..<count).map { index in
                 SubtitleLine(
                     id: UUID(), start: TimeInterval(index), end: TimeInterval(index) + 1,
-                    role: role, roles: [role], text: "line", style: "", effect: "", sex: ""
+                    roles: [role], text: "line", style: "", effect: "", sex: ""
                 )
             }
         }
@@ -89,7 +89,7 @@ final class CoreTests: XCTestCase {
             RoleGenderSetting(role: "Queen", gender: .female),
         ]
 
-        let result = try RoleAssignmentService.assignRoles(subtitle: subtitle, voices: voices, roleSettings: settings)
+        let result = try RoleAssignmentService.assignRoles(subtitle: subtitle, voices: voices, roleSettings: settings, language: .ru)
         XCTAssertEqual(result.roleToVoice["Queen"], 3)
         XCTAssertEqual(result.roleToVoice["Hero"], 1)
         XCTAssertEqual(result.roleToVoice["Sidekick"], 2)
@@ -108,8 +108,8 @@ final class CoreTests: XCTestCase {
         try body.data(using: .utf8)?.write(to: sourceUrl)
         let originalData = try Data(contentsOf: sourceUrl)
 
-        let imported = try SubtitleImporter.importFile(path: sourceUrl.path)
-        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path)
+        let imported = try SubtitleImporter.importFile(path: sourceUrl.path, language: .ru)
+        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path, language: .ru)
 
         XCTAssertEqual(URL(fileURLWithPath: created).lastPathComponent, "movie (1).ass")
         XCTAssertEqual(try Data(contentsOf: sourceUrl), originalData)
@@ -117,7 +117,7 @@ final class CoreTests: XCTestCase {
     }
 
     func testTextTools() {
-        XCTAssertEqual(TextTools.cleanRoleName("   "), Roles.unassigned)
+        XCTAssertEqual(TextTools.cleanRoleName("   "), "")
         XCTAssertEqual(TextTools.cleanRoleName("Anna / Bob"), "Anna_Bob")
         XCTAssertEqual(TextTools.extractBracketRoles("[Anna] hi [Bob]"), ["Anna", "Bob"])
         XCTAssertEqual(TextTools.safeFileName("a/b:c"), "a_b_c")
@@ -131,10 +131,10 @@ final class CoreTests: XCTestCase {
         try XCTUnwrap(body.data(using: cp1251)).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let imported = try SubtitleImporter.importFile(path: url.path)
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
         XCTAssertEqual(imported.lines.count, 1)
         XCTAssertEqual(imported.lines.first?.text, "Привет")
-        XCTAssertTrue(imported.allRoles.contains("Анна"))
+        XCTAssertTrue(imported.allRoles(.ru).contains("Анна"))
     }
 
     func testSrtExportRoundTrip() throws {
@@ -151,7 +151,7 @@ final class CoreTests: XCTestCase {
             srtSeparateWithRoles: false,
             selectedRoles: []
         )
-        let created = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings)
+        let created = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru)
         let content = try String(contentsOf: URL(fileURLWithPath: try XCTUnwrap(created.first)), encoding: .utf8)
         XCTAssertTrue(content.contains("00:00:01,000 --> 00:00:02,000"))
         XCTAssertTrue(content.contains("Привет"))
@@ -161,7 +161,7 @@ final class CoreTests: XCTestCase {
         let subtitle = makeSubtitle()
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let path = try DocxExporter.export(subtitle: subtitle, outputFolder: dir.path)
+        let path = try DocxExporter.export(subtitle: subtitle, outputFolder: dir.path, language: .ru)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
@@ -180,7 +180,7 @@ final class CoreTests: XCTestCase {
             sourceType: .srt,
             lines: [
                 SubtitleLine(
-                    id: UUID(), start: 1, end: 2, role: "Анна", roles: ["Анна"],
+                    id: UUID(), start: 1, end: 2, roles: ["Анна"],
                     text: "Привет", style: "", effect: "", sex: ""
                 )
             ]

@@ -130,7 +130,7 @@ struct AboutView: View {
                     updatePageUrl = release.pageUrl
                 }
             } catch {
-                updateStatus = error.localizedDescription
+                updateStatus = L.describe(error, language)
             }
             isCheckingUpdates = false
         }

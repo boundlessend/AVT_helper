@@ -32,7 +32,7 @@ struct RoleAssignmentView: View {
         self.language = language
         self.onComplete = onComplete
         self.onError = onError
-        self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle)
+        self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle, language: language)
     }
 
     private func t(_ key: String) -> String {
@@ -82,7 +82,7 @@ struct RoleAssignmentView: View {
         .onAppear {
             if roleSettings.isEmpty {
                 let hints: [String: VoiceGender] = roleGenderHints()
-                roleSettings = subtitle.allRoles.map { role in
+                roleSettings = subtitle.allRoles(language).map { role in
                     RoleGenderSetting(role: role, gender: hints[role] ?? .male)
                 }
             }
@@ -94,7 +94,7 @@ struct RoleAssignmentView: View {
             guard let gender: VoiceGender = genderHint(sex: line.sex) else {
                 return
             }
-            for role in line.effectiveRoles where result[role] == nil {
+            for role in line.displayRoles(language) where result[role] == nil {
                 result[role] = gender
             }
         }
@@ -191,16 +191,19 @@ struct RoleAssignmentView: View {
                 let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
                     subtitle: subtitle,
                     voices: voices,
-                    roleSettings: roleSettings
+                    roleSettings: roleSettings,
+                    language: language
                 )
                 let voiceSummaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result)
                 let exportSubtitle: ImportedSubtitle = subtitle
                 let exportFolder: String = outputFolder
+                let exportLanguage: AppLanguage = language
                 let suffix: String = L.text("file.assignmentSuffix", language)
                 let path: String = try await Task.detached(priority: .userInitiated) {
                     try DocxExporter.export(
                         subtitle: exportSubtitle,
                         outputFolder: exportFolder,
+                        language: exportLanguage,
                         roleHighlights: result.roleToHighlight,
                         voiceSummaries: voiceSummaries,
                         fileSuffix: suffix
@@ -212,7 +215,7 @@ struct RoleAssignmentView: View {
                 dismiss()
             } catch {
                 isWorking = false
-                onError(error.localizedDescription)
+                onError(L.describe(error, language))
             }
         }
     }

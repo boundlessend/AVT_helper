@@ -25,11 +25,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
         return language
     }
-
-    /// текущий язык приложения, прочитанный напрямую из настроек
-    static var current: AppLanguage {
-        resolve(UserDefaults.standard.string(forKey: storageKey))
-    }
 }
 
 enum AppLimits {
@@ -38,9 +33,9 @@ enum AppLimits {
 }
 
 enum Roles {
-    /// каноническое имя для нераспознанной роли на текущем языке приложения
-    static var unassigned: String {
-        L.text("role.unassigned", AppLanguage.current)
+    /// метка нераспознанной роли на выбранном языке
+    static func unassigned(_ language: AppLanguage) -> String {
+        L.text("role.unassigned", language)
     }
 
     /// проверяет, что имя совпадает с меткой нераспознанной роли на любом из языков
@@ -58,7 +53,7 @@ enum AppInfo {
     }
 }
 
-enum SubtitleSourceType: String {
+enum SubtitleSourceType: String, Sendable {
     case ass = "ASS"
     case ssa = "SSA"
     case srt = "SRT"
@@ -66,56 +61,45 @@ enum SubtitleSourceType: String {
     case srp = "SRP"
 }
 
-struct SubtitleLine: Identifiable, Hashable {
+struct SubtitleLine: Identifiable, Hashable, Sendable {
     let id: UUID
     let start: TimeInterval
     let end: TimeInterval
-    let role: String
+    /// очищенные уникальные роли реплики, вычисленные при импорте; пустой список означает нераспознанную роль
     let roles: [String]
     let text: String
     let style: String
     let effect: String
     let sex: String
 
-    var effectiveRoles: [String] {
-        let sourceRoles: [String] = roles.isEmpty ? [role] : roles
-        let uniqueRoles: [String] = sourceRoles.reduce(into: [String]()) { result, item in
-            let normalized: String = TextTools.cleanRoleName(item)
-            let exists: Bool = result.contains { current in
-                current.caseInsensitiveCompare(normalized) == .orderedSame
-            }
-            if !normalized.isEmpty && !exists {
-                result.append(normalized)
-            }
-        }
-        return uniqueRoles.isEmpty ? [Roles.unassigned] : uniqueRoles
+    /// роли для показа и экспорта: нераспознанная роль подставляется меткой нужного языка
+    func displayRoles(_ language: AppLanguage) -> [String] {
+        roles.isEmpty ? [Roles.unassigned(language)] : roles
     }
 }
 
-struct ImportedSubtitle {
+struct ImportedSubtitle: Sendable {
     let baseName: String
     let sourcePath: String
     let sourceType: SubtitleSourceType
     let lines: [SubtitleLine]
 
-    var allRoles: [String] {
-        lines
-            .flatMap { line in line.effectiveRoles }
-            .reduce(into: [String]()) { result, role in
-                let exists: Bool = result.contains { current in
-                    current.caseInsensitiveCompare(role) == .orderedSame
-                }
-                if !exists {
-                    result.append(role)
-                }
+    /// уникальные роли файла в алфавитном порядке, без учёта регистра
+    func allRoles(_ language: AppLanguage) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for line in lines {
+            for role in line.displayRoles(language) where seen.insert(role.lowercased()).inserted {
+                result.append(role)
             }
-            .sorted { left, right in
-                left.localizedCaseInsensitiveCompare(right) == .orderedAscending
-            }
+        }
+        return result.sorted { left, right in
+            left.localizedCaseInsensitiveCompare(right) == .orderedAscending
+        }
     }
 }
 
-struct ExportSettings {
+struct ExportSettings: Sendable {
     let exportAss: Bool
     let exportSrt: Bool
     let exportVtt: Bool
@@ -126,7 +110,7 @@ struct ExportSettings {
     let selectedRoles: Set<String>
 }
 
-enum VoiceGender: String, CaseIterable, Identifiable {
+enum VoiceGender: String, CaseIterable, Identifiable, Sendable {
     case male
     case female
 
@@ -160,7 +144,7 @@ enum VoiceGender: String, CaseIterable, Identifiable {
 }
 
 /// rawValue совпадает со значением w:highlight в формате Word
-enum WordHighlightColor: String, CaseIterable, Identifiable {
+enum WordHighlightColor: String, CaseIterable, Identifiable, Sendable {
     case yellow
     case green
     case cyan
@@ -211,25 +195,25 @@ enum WordHighlightColor: String, CaseIterable, Identifiable {
 
 }
 
-struct VoiceConfig: Identifiable {
+struct VoiceConfig: Identifiable, Sendable {
     let id: Int
     var gender: VoiceGender
     var color: WordHighlightColor
 }
 
-struct RoleGenderSetting: Identifiable {
+struct RoleGenderSetting: Identifiable, Sendable {
     let role: String
     var gender: VoiceGender
 
     var id: String { role }
 }
 
-struct RoleAssignmentResult {
+struct RoleAssignmentResult: Sendable {
     let roleToVoice: [String: Int]
     let roleToHighlight: [String: WordHighlightColor]
 }
 
-struct VoiceRoleSummary {
+struct VoiceRoleSummary: Sendable {
     let voice: VoiceConfig
     let roles: [String]
 }

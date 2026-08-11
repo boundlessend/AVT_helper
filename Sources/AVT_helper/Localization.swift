@@ -5,6 +5,18 @@ enum L {
         values[key]?[language] ?? values[key]?[.ru] ?? key
     }
 
+    /// текст любой ошибки приложения на выбранном языке
+    static func describe(_ error: Error, _ language: AppLanguage) -> String {
+        switch error {
+        case let subtitleError as SubtitleError:
+            return subtitleError.message(language)
+        case let updateError as UpdateError:
+            return updateError.message(language)
+        default:
+            return error.localizedDescription
+        }
+    }
+
     /// подставляет значения в плейсхолдеры вида {token} локализованной строки
     static func format(_ key: String, _ language: AppLanguage, _ replacements: [String: String]) -> String {
         replacements.reduce(text(key, language)) { partial, pair in
