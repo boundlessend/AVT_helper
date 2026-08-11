@@ -5,7 +5,6 @@ struct RoleAssignmentView: View {
     let outputFolder: String
     let language: AppLanguage
     let onComplete: (String) -> Void
-    let onError: (String) -> Void
 
     /// считается один раз при создании, чтобы не пересчитывать все реплики на каждый рендер списка
     private let roleCounts: [String: Int]
@@ -17,22 +16,33 @@ struct RoleAssignmentView: View {
     ]
     @State private var voiceCount: Int = 2
     @State private var roleSettings: [RoleGenderSetting] = []
-    @State private var assignmentSummary: String = ""
+    @State private var errorMessage: String = ""
     @State private var isWorking: Bool = false
+    @State private var progress: Double = 0
 
     init(
         subtitle: ImportedSubtitle,
         outputFolder: String,
         language: AppLanguage,
-        onComplete: @escaping (String) -> Void,
-        onError: @escaping (String) -> Void
+        onComplete: @escaping (String) -> Void
     ) {
         self.subtitle = subtitle
         self.outputFolder = outputFolder
         self.language = language
         self.onComplete = onComplete
-        self.onError = onError
         self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle, language: language)
+    }
+
+    /// пол, для ролей которого не назначено ни одного голоса; пока он есть, разролёвка невозможна
+    private var genderWithoutVoice: VoiceGender? {
+        VoiceGender.allCases.first { gender in
+            roleSettings.contains { setting in setting.gender == gender }
+                && !voices.contains { voice in voice.gender == gender }
+        }
+    }
+
+    private var hasDuplicateColors: Bool {
+        Set(voices.map { voice in voice.color }).count != voices.count
     }
 
     private func t(_ key: String) -> String {
@@ -59,23 +69,21 @@ struct RoleAssignmentView: View {
                 .font(.headline)
             roleTable
 
-            if !assignmentSummary.isEmpty {
-                Text(assignmentSummary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            messages
 
-            HStack {
+            HStack(spacing: 10) {
                 Spacer()
                 if isWorking {
-                    ProgressView()
-                        .controlSize(.small)
+                    ProgressView(value: progress)
+                        .frame(width: 130)
+                    Text("\(Int(progress * 100))%")
+                        .monospacedDigit()
                 }
                 Button(t("assignRoles")) {
                     assignRoles()
                 }
                 .keyboardShortcut(.return)
-                .disabled(isWorking)
+                .disabled(isWorking || genderWithoutVoice != nil)
             }
         }
         .padding(18)
@@ -86,6 +94,30 @@ struct RoleAssignmentView: View {
                     RoleGenderSetting(role: role, gender: hints[role] ?? .male)
                 }
             }
+        }
+    }
+
+    /// предупреждения и ошибки показываются здесь же: главное окно закрыто этим листом
+    @ViewBuilder
+    private var messages: some View {
+        if let gender: VoiceGender = genderWithoutVoice {
+            Label(
+                L.format("error.noVoiceForGender", language, ["g": gender.title(language)]),
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.footnote)
+            .foregroundStyle(.red)
+        } else if hasDuplicateColors {
+            Label(t("warning.duplicateColors"), systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.orange)
+        }
+
+        if !errorMessage.isEmpty {
+            Text(errorMessage)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
         }
     }
 
@@ -178,14 +210,23 @@ struct RoleAssignmentView: View {
 
         while voices.count < count {
             let nextId: Int = (voices.map { voice in voice.id }.max() ?? 0) + 1
-            let gender: VoiceGender = nextId % 2 == 0 ? .female : .male
-            let color: WordHighlightColor = WordHighlightColor.allCases[(nextId - 1) % WordHighlightColor.allCases.count]
-            voices.append(VoiceConfig(id: nextId, gender: gender, color: color))
+            let used: Set<WordHighlightColor> = Set(voices.map { voice in voice.color })
+            let freeColor: WordHighlightColor? = WordHighlightColor.allCases.first { color in !used.contains(color) }
+            let fallback: WordHighlightColor = WordHighlightColor.allCases[(nextId - 1) % WordHighlightColor.allCases.count]
+            voices.append(
+                VoiceConfig(
+                    id: nextId,
+                    gender: nextId % 2 == 0 ? .female : .male,
+                    color: freeColor ?? fallback
+                )
+            )
         }
     }
 
     private func assignRoles() {
         isWorking = true
+        progress = 0
+        errorMessage = ""
         Task {
             do {
                 let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
@@ -208,16 +249,20 @@ struct RoleAssignmentView: View {
                         paths: &paths,
                         roleHighlights: result.roleToHighlight,
                         voiceSummaries: voiceSummaries,
-                        fileSuffix: suffix
+                        fileSuffix: suffix,
+                        progress: { fraction in
+                            Task { @MainActor in
+                                progress = fraction
+                            }
+                        }
                     )
                 }.value
-                assignmentSummary = buildSummary(result: result)
                 isWorking = false
                 onComplete(path)
                 dismiss()
             } catch {
                 isWorking = false
-                onError(L.describe(error, language))
+                errorMessage = L.describe(error, language)
             }
         }
     }
@@ -237,15 +282,6 @@ struct RoleAssignmentView: View {
         }
     }
 
-    private func buildSummary(result: RoleAssignmentResult) -> String {
-        let counts: [String: Int] = roleCounts
-        let loadByVoice: [Int: Int] = result.roleToVoice.reduce(into: [Int: Int]()) { result, item in
-            result[item.value, default: 0] += counts[item.key, default: 0]
-        }
-        return voices.map { voice in
-            "\(t("voice")) \(voice.id): \(loadByVoice[voice.id, default: 0]) \(t("lineCountSuffix"))"
-        }.joined(separator: "  ")
-    }
 }
 
 private extension WordHighlightColor {

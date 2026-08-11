@@ -69,10 +69,10 @@ final class ProcessingModel: ObservableObject {
     func importFile(path: String, language: AppLanguage) async {
         isWorking = true
         progress = 0
-        let work: Task<ImportedSubtitle, Error> = Task.detached(priority: .userInitiated) { [weak self] in
+        let work: Task<ImportedSubtitle, Error> = Task.detached(priority: .userInitiated) { [self] in
             try SubtitleImporter.importFile(path: path, language: language) { fraction in
                 Task { @MainActor in
-                    self?.progress = fraction
+                    self.progress = fraction
                 }
             }
         }
@@ -101,10 +101,10 @@ final class ProcessingModel: ObservableObject {
         }
         isWorking = true
         progress = 0
-        let work: Task<[String], Error> = Task.detached(priority: .userInitiated) { [weak self] in
+        let work: Task<[String], Error> = Task.detached(priority: .userInitiated) { [self] in
             try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language) { fraction in
                 Task { @MainActor in
-                    self?.progress = fraction
+                    self.progress = fraction
                 }
             }
         }
@@ -224,9 +224,6 @@ struct ContentView: View {
                         model.lastCreatedFiles = [path]
                         model.log("\(t("createdAssignment")): \(path)")
                         showDoneAlert = true
-                    },
-                    onError: { message in
-                        model.log(message)
                     }
                 )
                 .frame(minWidth: 860, minHeight: 620)

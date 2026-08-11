@@ -112,6 +112,10 @@ enum L {
             .en: "No voice assigned for {g} roles.",
         ],
         "error.cannotPickVoice": [.ru: "Не удалось выбрать голос для роли «{r}».", .en: "Could not pick a voice for role {r}."],
+        "warning.duplicateColors": [
+            .ru: "Разным голосам назначен одинаковый цвет выделения: в документе их будет не отличить.",
+            .en: "Several voices share one highlight color and will look identical in the document.",
+        ],
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
         "role.unassigned": [.ru: "Не назначено", .en: "Unassigned"],
         "update.check": [.ru: "Проверить обновления", .en: "Check for updates"],
