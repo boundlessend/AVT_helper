@@ -117,6 +117,37 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: created))
     }
 
+    func testDocxStaysValidXmlWithControlCharacters() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "control",
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [
+                SubtitleLine(
+                    id: UUID(), start: 1, end: 2, roles: ["Анна"],
+                    text: "Привет\u{0B}мир\u{01}", style: "", effect: "", sex: ""
+                )
+            ]
+        )
+        var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
+        let path = try DocxExporter.export(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+
+        let document = try run("/usr/bin/unzip", ["-p", path, "word/document.xml"])
+        let xmlPath = dir.appendingPathComponent("document.xml")
+        try document.write(to: xmlPath)
+        let lint = Process()
+        lint.executableURL = URL(fileURLWithPath: "/usr/bin/xmllint")
+        lint.arguments = ["--noout", xmlPath.path]
+        lint.standardOutput = Pipe()
+        lint.standardError = Pipe()
+        try lint.run()
+        lint.waitUntilExit()
+
+        XCTAssertEqual(lint.terminationStatus, 0, "document.xml не проходит строгую проверку XML")
+    }
+
     func testSeparateRoleFilesDoNotCollide() throws {
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -249,6 +280,20 @@ final class CoreTests: XCTestCase {
                 )
             ]
         )
+    }
+
+    /// запускает утилиту и отдаёт её stdout
+    private func run(_ tool: String, _ arguments: [String]) throws -> Data {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        try process.run()
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return output
     }
 
     private func makeTempDir() -> URL {

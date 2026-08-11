@@ -103,13 +103,38 @@ enum TextTools {
         return clean.isEmpty ? "export" : clean
     }
 
+    /// экранирует спецсимволы и выбрасывает символы, недопустимые в XML 1.0: иначе Word отказывается открывать docx
     static func xmlEscape(_ input: String) -> String {
-        input
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
+        var result: String = ""
+        result.reserveCapacity(input.unicodeScalars.count)
+        for scalar in input.unicodeScalars {
+            switch scalar {
+            case "&":
+                result += "&amp;"
+            case "<":
+                result += "&lt;"
+            case ">":
+                result += "&gt;"
+            case "\"":
+                result += "&quot;"
+            case "'":
+                result += "&apos;"
+            default:
+                if isAllowedInXml(scalar) {
+                    result.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        return result
+    }
+
+    private static func isAllowedInXml(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x09, 0x0A, 0x0D, 0x20...0xD7FF, 0xE000...0xFFFD, 0x10000...0x10FFFF:
+            return true
+        default:
+            return false
+        }
     }
 
     static func normalizeSex(_ input: String) -> String {
