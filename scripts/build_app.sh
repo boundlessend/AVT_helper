@@ -9,8 +9,19 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 EXECUTABLE_PATH="${ROOT_DIR}/.build/release/${APP_NAME}"
-VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//' || true)"
-VERSION="${VERSION:-0.0.0}"
+ICON_SOURCE="${ROOT_DIR}/Assets/AVT_helper_icon.png"
+ICONSET_DIR="${BUILD_DIR}/AppIcon.iconset"
+
+RELEASE_VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//' || true)"
+RELEASE_VERSION="${RELEASE_VERSION:-0.0.0}"
+
+# сборка вне тега или с незакоммиченными правками помечается как dev, иначе она выдаёт себя за релиз
+if git -C "${ROOT_DIR}" describe --tags --exact-match >/dev/null 2>&1 && [ -z "$(git -C "${ROOT_DIR}" status --porcelain)" ]; then
+  VERSION="${RELEASE_VERSION}"
+else
+  COMMIT="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  VERSION="${RELEASE_VERSION}-dev.${COMMIT}"
+fi
 
 cd "${ROOT_DIR}"
 swift build -c release
@@ -18,8 +29,17 @@ swift build -c release
 rm -rf "${APP_DIR}"
 mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 cp "${EXECUTABLE_PATH}" "${MACOS_DIR}/${APP_NAME}"
-cp "${ROOT_DIR}/Assets/AVT_helper.icns" "${RESOURCES_DIR}/AVT_helper.icns"
 chmod +x "${MACOS_DIR}/${APP_NAME}"
+
+# иконка собирается из одного исходника: хранить десять срезов в репозитории незачем
+rm -rf "${ICONSET_DIR}"
+mkdir -p "${ICONSET_DIR}"
+for SIZE in 16 32 128 256 512; do
+  sips -z "${SIZE}" "${SIZE}" "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_${SIZE}x${SIZE}.png" >/dev/null
+  sips -z "$((SIZE * 2))" "$((SIZE * 2))" "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
+done
+iconutil --convert icns "${ICONSET_DIR}" --output "${RESOURCES_DIR}/AVT_helper.icns"
+rm -rf "${ICONSET_DIR}"
 
 cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,7 +57,7 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>${VERSION}</string>
+    <string>${RELEASE_VERSION}</string>
     <key>CFBundleShortVersionString</key>
     <string>${VERSION}</string>
     <key>CFBundleIconFile</key>
