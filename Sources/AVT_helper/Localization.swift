@@ -37,7 +37,6 @@ enum L {
         "chooseOutputFolder": [.ru: "Выбрать папку выгрузки", .en: "Choose output folder"],
         "start": [.ru: "Начать", .en: "Start"],
         "makeRoleAssignment": [.ru: "Сделать разролёвку", .en: "Make role assignment"],
-        "assignedRoles": [.ru: "Проставленные роли", .en: "Detected roles"],
         "paths": [.ru: "Пути", .en: "Paths"],
         "inputFile": [.ru: "Исходный файл", .en: "Input file"],
         "dropHint": [
