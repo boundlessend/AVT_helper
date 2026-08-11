@@ -133,6 +133,10 @@ enum L {
             .en: "Several voices share one highlight color and will look identical in the document.",
         ],
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
+        "error.noLines": [
+            .ru: "В файле не найдено ни одной реплики.",
+            .en: "The file contains no dialogue lines.",
+        ],
         "role.unassigned": [.ru: "Не назначено", .en: "Unassigned"],
         "update.check": [.ru: "Проверить обновления", .en: "Check for updates"],
         "update.latest": [.ru: "У вас последняя версия.", .en: "You have the latest version."],

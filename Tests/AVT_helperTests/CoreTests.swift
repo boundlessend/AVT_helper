@@ -266,6 +266,84 @@ final class CoreTests: XCTestCase {
         }
     }
 
+    func testSrpImportReadsRolesAndGender() throws {
+        let body = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Root>
+              <DocumentElement>
+                <Character>Анна</Character>
+                <Sex>Ж</Sex>
+                <BeginTime>00:00:01,000</BeginTime>
+                <EndTime>00:00:02,000</EndTime>
+                <Text>Привет\\Nмир</Text>
+              </DocumentElement>
+              <DocumentElement>
+                <Character></Character>
+                <Sex></Sex>
+                <BeginTime>00:00:03.000</BeginTime>
+                <EndTime>00:00:04.000</EndTime>
+                <Text>Без роли</Text>
+              </DocumentElement>
+            </Root>
+            """
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("avt_\(UUID().uuidString).srp")
+        try body.data(using: .utf8)?.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
+
+        XCTAssertEqual(imported.lines.count, 2)
+        XCTAssertEqual(imported.lines.first?.roles, ["Анна"])
+        XCTAssertEqual(imported.lines.first?.sex, "ЖЕН")
+        XCTAssertEqual(imported.lines.first?.text, "Привет мир")
+        XCTAssertEqual(imported.lines.last?.roles, [])
+        XCTAssertEqual(imported.lines.last?.displayRoles(.ru), ["Не назначено"])
+        XCTAssertEqual(imported.lines.last?.displayRoles(.en), ["Unassigned"])
+        XCTAssertEqual(imported.lines.last?.start ?? 0, 3, accuracy: 0.0001)
+    }
+
+    func testImportRejectsFileWithoutLines() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("avt_\(UUID().uuidString).srt")
+        try Data("не субтитры, просто текст\n".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        XCTAssertThrowsError(try SubtitleImporter.importFile(path: url.path, language: .ru)) { error in
+            XCTAssertTrue(L.describe(error, .ru).contains("ни одной реплики"))
+        }
+    }
+
+    func testDocxContainsTableRolesAndStatistics() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "doc",
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "Первая", style: "", effect: "", sex: ""),
+                SubtitleLine(id: UUID(), start: 3, end: 4, roles: [], text: "Вторая", style: "", effect: "", sex: ""),
+            ]
+        )
+        var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
+        let path = try DocxExporter.export(
+            subtitle: subtitle,
+            outputFolder: dir.path,
+            language: .ru,
+            paths: &paths,
+            roleHighlights: ["Анна": .cyan]
+        )
+
+        let xml = try XCTUnwrap(String(data: try run("/usr/bin/unzip", ["-p", path, "word/document.xml"]), encoding: .utf8))
+        XCTAssertTrue(xml.contains("Тайминг"))
+        XCTAssertTrue(xml.contains("Первая"))
+        XCTAssertTrue(xml.contains("Не назначено"))
+        XCTAssertTrue(xml.contains(#"<w:highlight w:val="cyan"/>"#))
+        XCTAssertTrue(xml.contains("Статистика по ролям"))
+        XCTAssertTrue(xml.contains("Анна - 1"))
+    }
+
     func testVersionComparison() {
         XCTAssertEqual(UpdateChecker.normalizeTag("v.1.6.5"), "1.6.5")
         XCTAssertEqual(UpdateChecker.normalizeTag("v1.6.5"), "1.6.5")

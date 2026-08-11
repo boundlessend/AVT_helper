@@ -20,6 +20,10 @@ enum SubtitleImporter {
             lines = try importSrp(text: text, progress: progress)
         }
 
+        if lines.isEmpty {
+            throw SubtitleError.importFailed(L.text("error.noLines", language))
+        }
+
         return ImportedSubtitle(
             baseName: url.deletingPathExtension().lastPathComponent,
             sourcePath: url.standardizedFileURL.path,
