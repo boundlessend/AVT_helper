@@ -200,10 +200,12 @@ struct RoleAssignmentView: View {
                 let exportLanguage: AppLanguage = language
                 let suffix: String = L.text("file.assignmentSuffix", language)
                 let path: String = try await Task.detached(priority: .userInitiated) {
-                    try DocxExporter.export(
+                    var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: exportSubtitle.sourcePath)
+                    return try DocxExporter.export(
                         subtitle: exportSubtitle,
                         outputFolder: exportFolder,
                         language: exportLanguage,
+                        paths: &paths,
                         roleHighlights: result.roleToHighlight,
                         voiceSummaries: voiceSummaries,
                         fileSuffix: suffix

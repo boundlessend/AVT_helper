@@ -6,23 +6,20 @@ enum DocxExporter {
         subtitle: ImportedSubtitle,
         outputFolder: String,
         language: AppLanguage,
+        paths: inout OutputPathAllocator,
         roleHighlights: [String: WordHighlightColor] = [:],
         voiceSummaries: [VoiceRoleSummary] = [],
         fileSuffix: String = ""
     ) throws -> String {
-        let safeBase: String = TextTools.safeFileName(subtitle.baseName)
-        let outputPath: String = URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase)\(fileSuffix).docx").path
+        let name: String = "\(TextTools.safeFileName(subtitle.baseName))\(fileSuffix)"
+        let outputPath: String = paths.reserve(folder: outputFolder, name: name, fileExtension: "docx")
         let entries: [ZipArchive.Entry] = docxEntries(
             subtitle: subtitle,
             language: language,
             roleHighlights: roleHighlights,
             voiceSummaries: voiceSummaries
         )
-        let archive: Data = ZipArchive.archive(entries: entries)
-        if FileManager.default.fileExists(atPath: outputPath) {
-            try FileManager.default.removeItem(atPath: outputPath)
-        }
-        try archive.write(to: URL(fileURLWithPath: outputPath))
+        try ZipArchive.archive(entries: entries).write(to: URL(fileURLWithPath: outputPath))
         return outputPath
     }
 

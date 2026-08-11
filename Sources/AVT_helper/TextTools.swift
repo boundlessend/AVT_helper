@@ -28,9 +28,10 @@ enum TextTools {
         return result
     }
 
+    /// снимает разметку ASS: вырезает неэкранированные блоки {...}, разворачивает переносы и экранированные скобки
     static func cleanAssText(_ input: String) -> String {
         let withoutOverrides: String = input.replacingOccurrences(
-            of: #"\{.*?\}"#,
+            of: #"(?<!\\)\{.*?(?<!\\)\}"#,
             with: "",
             options: [.regularExpression]
         )
@@ -39,11 +40,16 @@ enum TextTools {
             .replacingOccurrences(of: "\\N", with: "\n")
             .replacingOccurrences(of: "\\n", with: "\n")
             .replacingOccurrences(of: "\\h", with: " ")
+            .replacingOccurrences(of: "\\{", with: "{")
+            .replacingOccurrences(of: "\\}", with: "}")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// готовит текст реплики к записи в ASS: переносы строк и фигурные скобки, иначе текст будет прочитан как разметка
     static func escapeAssText(_ input: String) -> String {
         input
+            .replacingOccurrences(of: "{", with: "\\{")
+            .replacingOccurrences(of: "}", with: "\\}")
             .replacingOccurrences(of: "\r\n", with: "\\N")
             .replacingOccurrences(of: "\n", with: "\\N")
             .replacingOccurrences(of: "\r", with: "\\N")

@@ -1,22 +1,60 @@
 import Foundation
 
+/// выдаёт пути для новых файлов одного прогона экспорта: не затирает ни исходный файл,
+/// ни уже лежащие на диске, ни выданные ранее в этом же прогоне
+struct OutputPathAllocator {
+    private let sourceKey: String
+    private var taken: Set<String> = []
+
+    init(sourcePath: String) {
+        sourceKey = OutputPathAllocator.key(sourcePath)
+    }
+
+    /// путь для файла с указанным именем; при занятости добавляет " (1)", " (2)" и так далее
+    mutating func reserve(folder: String, name: String, fileExtension: String) -> String {
+        let folderUrl: URL = URL(fileURLWithPath: folder)
+        var attempt: Int = 0
+        while true {
+            let suffix: String = attempt == 0 ? "" : " (\(attempt))"
+            let candidate: URL = folderUrl.appendingPathComponent("\(name)\(suffix).\(fileExtension)")
+            let candidateKey: String = OutputPathAllocator.key(candidate.path)
+            let isFree: Bool =
+                candidateKey != sourceKey
+                && !taken.contains(candidateKey)
+                && !FileManager.default.fileExists(atPath: candidate.path)
+            if isFree {
+                taken.insert(candidateKey)
+                return candidate.path
+            }
+            attempt += 1
+        }
+    }
+
+    private static func key(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path.lowercased()
+    }
+}
+
 enum SubtitleExporter {
     /// экспортирует субтитры во все выбранные пользователем форматы
     static func export(subtitle: ImportedSubtitle, outputFolder: String, settings: ExportSettings, language: AppLanguage) throws -> [String] {
         try FileManager.default.createDirectory(atPath: outputFolder, withIntermediateDirectories: true)
+        var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: subtitle.sourcePath)
         var created: [String] = []
 
         if settings.exportAss {
-            created.append(try exportAss(subtitle: subtitle, outputFolder: outputFolder, language: language))
+            created.append(try exportAss(subtitle: subtitle, outputFolder: outputFolder, language: language, paths: &paths))
         }
         if settings.exportSrt {
-            created.append(contentsOf: try exportSrt(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language))
+            created.append(
+                contentsOf: try exportSrt(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language, paths: &paths)
+            )
         }
         if settings.exportVtt {
-            created.append(try exportVtt(subtitle: subtitle, outputFolder: outputFolder, language: language))
+            created.append(try exportVtt(subtitle: subtitle, outputFolder: outputFolder, language: language, paths: &paths))
         }
         if settings.exportDocx {
-            created.append(try DocxExporter.export(subtitle: subtitle, outputFolder: outputFolder, language: language))
+            created.append(try DocxExporter.export(subtitle: subtitle, outputFolder: outputFolder, language: language, paths: &paths))
         }
 
         if created.isEmpty {
@@ -26,13 +64,8 @@ enum SubtitleExporter {
         return created
     }
 
-    static func exportAss(subtitle: ImportedSubtitle, outputFolder: String, language: AppLanguage) throws -> String {
-        let path: String = safeOutputPath(
-            URL(fileURLWithPath: outputFolder)
-                .appendingPathComponent("\(TextTools.safeFileName(subtitle.baseName)).ass")
-                .path,
-            sourcePath: subtitle.sourcePath
-        )
+    static func exportAss(subtitle: ImportedSubtitle, outputFolder: String, language: AppLanguage, paths: inout OutputPathAllocator) throws -> String {
+        let path: String = paths.reserve(folder: outputFolder, name: TextTools.safeFileName(subtitle.baseName), fileExtension: "ass")
         var output: String = assHeader()
         for line in subtitle.lines {
             let style: String = escapeAssField(line.style.isEmpty ? "Default" : line.style)
@@ -43,26 +76,26 @@ enum SubtitleExporter {
         return path
     }
 
-    static func exportSrt(subtitle: ImportedSubtitle, outputFolder: String, settings: ExportSettings, language: AppLanguage) throws -> [String] {
+    static func exportSrt(
+        subtitle: ImportedSubtitle,
+        outputFolder: String,
+        settings: ExportSettings,
+        language: AppLanguage,
+        paths: inout OutputPathAllocator
+    ) throws -> [String] {
         var created: [String] = []
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
         let hasMode: Bool = settings.srtFullWithRoles || settings.srtSeparateFiles || settings.srtSeparateWithRoles
 
         if !hasMode {
-            let path: String = safeOutputPath(
-                URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase) [FULL].srt").path,
-                sourcePath: subtitle.sourcePath
-            )
+            let path: String = paths.reserve(folder: outputFolder, name: "\(safeBase) [FULL]", fileExtension: "srt")
             try writeSrt(path: path, lines: subtitle.lines, includeRoles: false, language: language)
             created.append(path)
             return created
         }
 
         if settings.srtFullWithRoles {
-            let path: String = safeOutputPath(
-                URL(fileURLWithPath: outputFolder).appendingPathComponent("\(safeBase) [FULL_SQUARED].srt").path,
-                sourcePath: subtitle.sourcePath
-            )
+            let path: String = paths.reserve(folder: outputFolder, name: "\(safeBase) [FULL_SQUARED]", fileExtension: "srt")
             try writeSrt(path: path, lines: subtitle.lines, includeRoles: true, language: language)
             created.append(path)
         }
@@ -76,12 +109,7 @@ enum SubtitleExporter {
                 if roleLines.isEmpty {
                     continue
                 }
-                let path: String = safeOutputPath(
-                    URL(fileURLWithPath: outputFolder)
-                        .appendingPathComponent("\(safeBase) [\(TextTools.safeFileName(role))].srt")
-                        .path,
-                    sourcePath: subtitle.sourcePath
-                )
+                let path: String = paths.reserve(folder: outputFolder, name: "\(safeBase) [\(TextTools.safeFileName(role))]", fileExtension: "srt")
                 try writeSrt(path: path, lines: roleLines, includeRoles: settings.srtSeparateWithRoles, language: language)
                 created.append(path)
             }
@@ -90,13 +118,8 @@ enum SubtitleExporter {
         return created
     }
 
-    static func exportVtt(subtitle: ImportedSubtitle, outputFolder: String, language: AppLanguage) throws -> String {
-        let path: String = safeOutputPath(
-            URL(fileURLWithPath: outputFolder)
-                .appendingPathComponent("\(TextTools.safeFileName(subtitle.baseName)).vtt")
-                .path,
-            sourcePath: subtitle.sourcePath
-        )
+    static func exportVtt(subtitle: ImportedSubtitle, outputFolder: String, language: AppLanguage, paths: inout OutputPathAllocator) throws -> String {
+        let path: String = paths.reserve(folder: outputFolder, name: TextTools.safeFileName(subtitle.baseName), fileExtension: "vtt")
         var output: String = "WEBVTT\n\n"
         for index in subtitle.lines.indices {
             let line: SubtitleLine = subtitle.lines[index]
@@ -108,19 +131,6 @@ enum SubtitleExporter {
         }
         try output.write(toFile: path, atomically: true, encoding: .utf8)
         return path
-    }
-
-    /// не даёт экспорту затереть импортированный исходный файл: при совпадении путей добавляет " (1)" к имени
-    static func safeOutputPath(_ path: String, sourcePath: String) -> String {
-        let target: String = URL(fileURLWithPath: path).standardizedFileURL.path
-        guard target.caseInsensitiveCompare(sourcePath) == .orderedSame else {
-            return path
-        }
-        let url: URL = URL(fileURLWithPath: path)
-        let base: String = url.deletingPathExtension().lastPathComponent
-        return url.deletingLastPathComponent()
-            .appendingPathComponent("\(base) (1).\(url.pathExtension)")
-            .path
     }
 
     /// убирает запятые из полей строки Dialogue, иначе они ломают разбор формата ASS

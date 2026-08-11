@@ -109,11 +109,74 @@ final class CoreTests: XCTestCase {
         let originalData = try Data(contentsOf: sourceUrl)
 
         let imported = try SubtitleImporter.importFile(path: sourceUrl.path, language: .ru)
-        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path, language: .ru)
+        var paths = OutputPathAllocator(sourcePath: imported.sourcePath)
+        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path, language: .ru, paths: &paths)
 
         XCTAssertEqual(URL(fileURLWithPath: created).lastPathComponent, "movie (1).ass")
         XCTAssertEqual(try Data(contentsOf: sourceUrl), originalData)
         XCTAssertTrue(FileManager.default.fileExists(atPath: created))
+    }
+
+    func testSeparateRoleFilesDoNotCollide() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "coll",
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["A:B"], text: "one", style: "", effect: "", sex: ""),
+                SubtitleLine(id: UUID(), start: 3, end: 4, roles: ["A*B"], text: "two", style: "", effect: "", sex: ""),
+            ]
+        )
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: false, exportDocx: false,
+            srtFullWithRoles: false, srtSeparateFiles: true, srtSeparateWithRoles: false, selectedRoles: []
+        )
+
+        let created = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru)
+
+        XCTAssertEqual(created.count, 2)
+        XCTAssertEqual(Set(created).count, 2)
+        let texts = try created.map { path in try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) }
+        XCTAssertTrue(texts.contains { text in text.contains("one") })
+        XCTAssertTrue(texts.contains { text in text.contains("two") })
+    }
+
+    func testSecondExportKeepsEarlierFiles() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = makeSubtitle()
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: false, exportDocx: false,
+            srtFullWithRoles: false, srtSeparateFiles: false, srtSeparateWithRoles: false, selectedRoles: []
+        )
+
+        let first = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru)
+        let second = try SubtitleExporter.export(subtitle: subtitle, outputFolder: dir.path, settings: settings, language: .ru)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(URL(fileURLWithPath: try XCTUnwrap(second.first)).lastPathComponent, "sample [FULL] (1).srt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(first.first)))
+    }
+
+    func testAssRoundTripKeepsCurlyBraces() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "braces",
+            sourcePath: "",
+            sourceType: .ass,
+            lines: [
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: "")
+            ]
+        )
+        var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
+
+        let created = try SubtitleExporter.exportAss(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+        let reimported = try SubtitleImporter.importFile(path: created, language: .ru)
+
+        XCTAssertEqual(reimported.lines.first?.text, "текст {в скобках} тут")
     }
 
     func testTextTools() {
@@ -161,7 +224,8 @@ final class CoreTests: XCTestCase {
         let subtitle = makeSubtitle()
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let path = try DocxExporter.export(subtitle: subtitle, outputFolder: dir.path, language: .ru)
+        var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
+        let path = try DocxExporter.export(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
