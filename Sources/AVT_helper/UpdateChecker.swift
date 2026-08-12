@@ -20,6 +20,10 @@ enum UpdateChecker {
         guard let http: HTTPURLResponse = response as? HTTPURLResponse else {
             throw UpdateError.invalidResponse
         }
+        // GitHub отдаёт 403 или 429 при исчерпании лимита запросов; счётчик остатка лежит в заголовке
+        if http.statusCode == 403 || http.statusCode == 429, http.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" {
+            throw UpdateError.rateLimited
+        }
         guard http.statusCode == 200 else {
             throw UpdateError.badStatus(http.statusCode)
         }
@@ -69,6 +73,7 @@ enum UpdateChecker {
 enum UpdateError: Error {
     case badStatus(Int)
     case invalidResponse
+    case rateLimited
 
     func message(_ language: AppLanguage) -> String {
         switch self {
@@ -76,6 +81,8 @@ enum UpdateError: Error {
             return L.format("error.updateFailed", language, ["code": String(code)])
         case .invalidResponse:
             return L.text("error.updateInvalidResponse", language)
+        case .rateLimited:
+            return L.text("error.updateRateLimited", language)
         }
     }
 }

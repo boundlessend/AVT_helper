@@ -157,6 +157,10 @@ enum L {
         "update.available": [.ru: "Доступна версия {v}.", .en: "Version {v} is available."],
         "update.download": [.ru: "Скачать", .en: "Download"],
         "error.updateFailed": [.ru: "Не удалось проверить обновления (HTTP {code}).", .en: "Update check failed (HTTP {code})."],
+        "error.updateRateLimited": [
+            .ru: "GitHub временно отклоняет проверки обновлений с этого адреса. Попробуйте через час.",
+            .en: "GitHub is refusing update checks from this address for now. Try again in an hour.",
+        ],
         "error.updateInvalidResponse": [.ru: "Не удалось разобрать ответ сервера обновлений.", .en: "Could not parse the update server response."],
         "col.timing": [.ru: "Тайминг", .en: "Timing"],
         "col.role": [.ru: "Роль", .en: "Role"],
