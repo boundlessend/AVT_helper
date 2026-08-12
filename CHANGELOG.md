@@ -16,8 +16,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Message log behind a click on the status bar, so an error stays readable after the next event.
 - Tests covering ASS, VTT and SRP import, DOCX content and validity, role-to-voice balancing, timecode fraction parsing, output name collisions, progress and cancellation, and version comparison.
 
+### Security
+
+- SRP import resolved external XML entities, so a crafted file could read local files and carry their contents into the exported DOCX. Files that declare a DTD are refused.
+
 ### Changed
 
+- Subtitle files open from Finder and the `File` menu lists the last eight of them.
+- The WebVTT voice tag `<v Name>` is read as a role, and markup tags no longer end up in the dialogue text.
+- A line spoken by several characters keeps all of them in ASS: the names are joined with a pipe and split back on import.
+- Assigned voices are named in the role list, so the voice no longer depends on telling eight highlight colors apart.
+- The role column of the sheet grows with the window instead of cutting names at a fixed width.
+- `Start` moved to `Cmd+Return` so that Enter in the output path field no longer launches a run.
+- The role prefix became an option of the separate SRT files instead of a second checkbox that produced the same one set.
+- Interface texts moved from a Swift dictionary into `ru.lproj` and `en.lproj` resources; a missing key now trips an assertion instead of showing the key.
+- `CFBundleVersion` is the commit count and grows between builds; the About window reports the build and its origin.
+- The app target is compiled with strict concurrency checking.
 - The main window was rebuilt around the imported file: a left rail holds the output settings, the middle shows the file as a dubbing sheet of timecode, role and line, and the role list moved to a right column with per-role share bars.
 - Roles carry a marker color everywhere: assigned automatically after import, replaced by the color of the assigned voice after a role assignment, so the screen matches the DOCX.
 - Role assignment previews which voice every role will get while the voices are being set up, and reports the roles of each voice in its table.
@@ -39,6 +53,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A file that spelled one role differently in different lines ("Анна" and "АННА") showed it as one role with a fraction of its lines, a wrong share bar and a marker on only part of the sheet. Role spelling is unified at import.
+- Square brackets in the middle of a line, which is how stage directions are written, became role names.
+- Role assignment ran with a missing output folder and failed with a raw Cocoa error; the button now explains itself and the run refuses politely.
+- The role assignment preview swallowed its error, leaving the colors blank without a reason.
+- The progress bar could jump backwards because each percent arrived as its own task.
+- The update check reported a bare `HTTP 403` when GitHub refused it over the hourly request limit.
 - Exporting into a folder that already holds files with the same names silently replaced them, and two roles whose names collapse to the same file name wrote into a single file; both cases now get a numbered suffix.
 - Control characters in dialogue produced a DOCX that Word refuses to open.
 - Role assignment errors went to the status bar of the main window, hidden behind the sheet.

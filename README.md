@@ -47,11 +47,11 @@ Then open the app again.
 
 > On first launch the interface follows the system language. Switch it in `Settings` (`Cmd+,`) -> `App language`.
 
-1. Click `Open subtitles` (`Cmd+O`) or drop a subtitle file onto the sheet in the middle of the window.
+1. Click `Open subtitles` (`Cmd+O`), drop a subtitle file onto the sheet in the middle of the window, or open the file from Finder. The last eight files are under `File` -> `Open Recent`.
 2. Choose the output folder in the left rail. It is remembered between launches.
 3. Select one or more export formats: `ASS`, `SRT`, `VTT`, or `DOCX`.
 4. Check the roles you need in the role list on the right if you export separate SRT files per role.
-5. Click `Start`. A long run can be stopped with `Cancel`.
+5. Click `Start` (`Cmd+Return`). A long run can be stopped with `Cancel`.
 6. To create a role-assignment DOCX, load a file with roles and click `Make role assignment`.
 
 Existing files are never overwritten: a numbered suffix is added to the new file instead.
