@@ -24,6 +24,8 @@
 
 It imports `ASS`, `SSA`, `SRT`, `VTT`, and `SRP`, exports `ASS`, `SRT`, `VTT`, and `DOCX`, and can create role-assignment DOCX files with Word highlight colors.
 
+The window shows the imported file as a dubbing sheet: timecode, role, line. Every role is highlighted with a marker color, and after a role assignment the sheet switches to the colors of the assigned voices, so the screen matches the DOCX.
+
 Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically. Import and export run in the background with a progress bar and can be cancelled, so the window stays responsive on large files.
 
 ## Install
@@ -45,10 +47,10 @@ Then open the app again.
 
 > On first launch the interface follows the system language. Switch it in `Settings` (`Cmd+,`) -> `App language`.
 
-1. Click `Open subtitles` (`Cmd+O`) or drag a subtitle file into the input area.
-2. Choose the output folder. It is remembered between launches.
+1. Click `Open subtitles` (`Cmd+O`) or drop a subtitle file onto the sheet in the middle of the window.
+2. Choose the output folder in the left rail. It is remembered between launches.
 3. Select one or more export formats: `ASS`, `SRT`, `VTT`, or `DOCX`.
-4. Check the roles you need in the role list if you export separate SRT files per role.
+4. Check the roles you need in the role list on the right if you export separate SRT files per role.
 5. Click `Start`. A long run can be stopped with `Cancel`.
 6. To create a role-assignment DOCX, load a file with roles and click `Make role assignment`.
 

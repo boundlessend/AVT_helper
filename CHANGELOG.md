@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The main window was rebuilt around the imported file: a left rail holds the output settings, the middle shows the file as a dubbing sheet of timecode, role and line, and the role list moved to a right column with per-role share bars.
+- Roles carry a marker color everywhere: assigned automatically after import, replaced by the color of the assigned voice after a role assignment, so the screen matches the DOCX.
+- Role assignment previews which voice every role will get while the voices are being set up, and reports the roles of each voice in its table.
 - Export format checkboxes and post-processing toggles persist between launches; SRT is enabled by default.
 - The output folder is remembered between launches.
 - DOCX table headers, role statistics, and voice summaries follow the app language instead of being Russian-only.
