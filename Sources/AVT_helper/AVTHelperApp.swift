@@ -60,14 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class ProcessingModel: ObservableObject {
     @Published var importedSubtitle: ImportedSubtitle?
-    @Published var roles: [String] = []
-    @Published var roleCounts: [String: Int] = [:]
+    /// роли, счётчики и хронометраж импортированного файла
+    @Published private(set) var digest: SubtitleDigest = .empty
     /// цвет маркера для каждой роли: после импорта автоматический, после разролёвки - цвет назначенного голоса
     @Published var roleHighlights: [String: WordHighlightColor] = [:]
     /// голос каждой роли после разролёвки: цвет один на голос, поэтому номер нужен, чтобы их различать
     @Published var roleVoices: [String: Int] = [:]
-    /// хронометраж файла, посчитанный один раз при импорте
-    @Published var duration: TimeInterval = 0
     @Published var status: String = ""
     @Published var isWorking: Bool = false
     @Published var progress: Double = 0
@@ -112,11 +110,9 @@ final class ProcessingModel: ObservableObject {
         do {
             let imported: ImportedSubtitle = try await work.value
             importedSubtitle = imported
-            roles = imported.allRoles(language)
-            roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: language)
-            roleHighlights = RoleColors.automatic(roles: roles)
+            digest = SubtitleDigest(subtitle: imported, language: language)
+            roleHighlights = RoleColors.automatic(roles: digest.roles)
             roleVoices = [:]
-            duration = imported.lines.map { line in line.end }.max() ?? 0
             log("\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue).")
         } catch is CancellationError {
             forgetInput()
@@ -160,11 +156,9 @@ final class ProcessingModel: ObservableObject {
 
     private func forgetInput() {
         importedSubtitle = nil
-        roles = []
-        roleCounts = [:]
+        digest = .empty
         roleHighlights = [:]
         roleVoices = [:]
-        duration = 0
     }
 
     private func finishWork() {
@@ -224,7 +218,7 @@ struct ContentView: View {
 
     /// причина, по которой разролёвка невозможна: ей нужен файл с ролями и живая папка выгрузки
     private var assignmentBlockReason: String? {
-        if model.importedSubtitle == nil || model.roles.isEmpty {
+        if model.importedSubtitle == nil || model.digest.roles.isEmpty {
             return t("hint.selectInput")
         }
         if !outputFolderExists {
@@ -298,6 +292,7 @@ struct ContentView: View {
             if let subtitle: ImportedSubtitle = model.importedSubtitle {
                 RoleAssignmentView(
                     subtitle: subtitle,
+                    digest: model.digest,
                     outputFolder: outputFolder,
                     language: language,
                     onComplete: { path, assignment in
@@ -319,8 +314,8 @@ struct ContentView: View {
             return ""
         }
         let lines: String = "\(subtitle.lines.count) \(t("lines"))"
-        let roles: String = "\(model.roles.count) \(t("rolesCountSuffix"))"
-        return "\(lines) · \(roles) · \(subtitle.sourceType.rawValue) · \(TimeTools.formatClockSeconds(model.duration))"
+        let roles: String = "\(model.digest.roles.count) \(t("rolesCountSuffix"))"
+        return "\(lines) · \(roles) · \(subtitle.sourceType.rawValue) · \(TimeTools.formatClockSeconds(model.digest.duration))"
     }
 
     /// левый рельс: всё, что задаёт выгрузку, собрано в одном столбце и не спорит с листом за внимание
@@ -455,25 +450,25 @@ struct ContentView: View {
     private var rolesColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionLabel(text: "\(t("roles")) · \(model.roles.count)")
+                SectionLabel(text: "\(t("roles")) · \(model.digest.roles.count)")
                 Spacer()
                 Button(t("selectAll")) {
-                    selectedRoles = Set(model.roles)
+                    selectedRoles = Set(model.digest.roles)
                 }
                 Button(t("selectNone")) {
                     selectedRoles = []
                 }
             }
             .controlSize(.small)
-            .disabled(model.roles.isEmpty)
+            .disabled(model.digest.roles.isEmpty)
 
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: 7) {
-                    ForEach(model.roles, id: \.self) { role in
+                    ForEach(model.digest.roles, id: \.self) { role in
                         RoleRow(
                             role: role,
-                            count: model.roleCounts[role, default: 0],
-                            share: roleShare(role),
+                            count: model.digest.counts[role, default: 0],
+                            share: model.digest.share(of: role),
                             color: model.roleHighlights[role],
                             voice: model.roleVoices[role],
                             language: language,
@@ -485,7 +480,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
-                if model.roles.isEmpty {
+                if model.digest.roles.isEmpty {
                     Text(t("roles.empty"))
                         .font(.system(size: 12))
                         .multilineTextAlignment(.center)
@@ -544,15 +539,6 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    /// доля реплик роли от всего файла: она же длина полоски в списке ролей
-    private func roleShare(_ role: String) -> Double {
-        let total: Int = model.importedSubtitle?.lines.count ?? 0
-        if total == 0 {
-            return 0
-        }
-        return Double(model.roleCounts[role, default: 0]) / Double(total)
     }
 
     /// журнал сообщений: в статус-баре видно только последнее, а ошибка нужна и после следующего события
@@ -622,7 +608,7 @@ struct ContentView: View {
         selectedRoles = []
         Task {
             await model.importFile(path: path, language: language)
-            selectedRoles = Set(model.roles)
+            selectedRoles = Set(model.digest.roles)
             if model.importedSubtitle != nil {
                 recentFilesRaw = RecentFiles.adding(path, to: recentFilesRaw)
             }

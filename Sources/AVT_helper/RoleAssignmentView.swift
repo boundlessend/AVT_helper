@@ -2,12 +2,11 @@ import SwiftUI
 
 struct RoleAssignmentView: View {
     let subtitle: ImportedSubtitle
+    /// роли и счётчики, уже посчитанные при импорте
+    let digest: SubtitleDigest
     let outputFolder: String
     let language: AppLanguage
     let onComplete: (String, RoleAssignmentResult) -> Void
-
-    /// считается один раз при создании, чтобы не пересчитывать все реплики на каждый рендер списка
-    private let roleCounts: [String: Int]
 
     @Environment(\.dismiss) private var dismiss
     @State private var voices: [VoiceConfig] = [
@@ -23,19 +22,6 @@ struct RoleAssignmentView: View {
     @State private var errorMessage: String = ""
     @State private var isWorking: Bool = false
     @State private var progress: Double = 0
-
-    init(
-        subtitle: ImportedSubtitle,
-        outputFolder: String,
-        language: AppLanguage,
-        onComplete: @escaping (String, RoleAssignmentResult) -> Void
-    ) {
-        self.subtitle = subtitle
-        self.outputFolder = outputFolder
-        self.language = language
-        self.onComplete = onComplete
-        self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle, language: language)
-    }
 
     private var hasDuplicateColors: Bool {
         Set(voices.map { voice in voice.color }).count != voices.count
@@ -62,7 +48,7 @@ struct RoleAssignmentView: View {
         .onAppear {
             if roleSettings.isEmpty {
                 let hints: [String: VoiceGender] = roleGenderHints()
-                roleSettings = subtitle.allRoles(language).map { role in
+                roleSettings = digest.roles.map { role in
                     RoleGenderSetting(role: role, gender: hints[role] ?? .male)
                 }
             }
@@ -158,7 +144,7 @@ struct RoleAssignmentView: View {
                 HStack(spacing: 10) {
                     RoleTag(role: setting.role, color: previewHighlights[setting.role])
                         .frame(width: 190, alignment: .leading)
-                    Text("\(roleCounts[setting.role, default: 0]) \(t("lineCountSuffix"))")
+                    Text("\(digest.counts[setting.role, default: 0]) \(t("lineCountSuffix"))")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .frame(width: 80, alignment: .trailing)
@@ -232,7 +218,7 @@ struct RoleAssignmentView: View {
     private func refreshPreview() {
         do {
             preview = try RoleAssignmentService.assignRoles(
-                subtitle: subtitle,
+                counts: digest.counts,
                 voices: voices,
                 roleSettings: roleSettings,
                 language: language
@@ -312,7 +298,7 @@ struct RoleAssignmentView: View {
         Task {
             do {
                 let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
-                    subtitle: subtitle,
+                    counts: digest.counts,
                     voices: voices,
                     roleSettings: roleSettings,
                     language: language

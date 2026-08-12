@@ -129,7 +129,8 @@ final class CoreTests: XCTestCase {
             RoleGenderSetting(role: "Queen", gender: .female),
         ]
 
-        let result = try RoleAssignmentService.assignRoles(subtitle: subtitle, voices: voices, roleSettings: settings, language: .ru)
+        let digest = SubtitleDigest(subtitle: subtitle, language: .ru)
+        let result = try RoleAssignmentService.assignRoles(counts: digest.counts, voices: voices, roleSettings: settings, language: .ru)
         XCTAssertEqual(result.roleToVoice["Queen"], 3)
         XCTAssertEqual(result.roleToVoice["Hero"], 1)
         XCTAssertEqual(result.roleToVoice["Sidekick"], 2)
@@ -365,7 +366,7 @@ final class CoreTests: XCTestCase {
         let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
 
         XCTAssertEqual(imported.allRoles(.ru), ["Анна"])
-        XCTAssertEqual(RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: .ru), ["Анна": 3])
+        XCTAssertEqual(SubtitleDigest(subtitle: imported, language: .ru).counts, ["Анна": 3])
     }
 
     func testSrpRejectsExternalEntities() throws {

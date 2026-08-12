@@ -1,17 +1,9 @@
 import Foundation
 
 enum RoleAssignmentService {
-    static func roleReplicaCounts(subtitle: ImportedSubtitle, language: AppLanguage) -> [String: Int] {
-        subtitle.lines.reduce(into: [String: Int]()) { result, line in
-            for role in line.displayRoles(language) {
-                result[role, default: 0] += 1
-            }
-        }
-    }
-
     /// распределяет роли по голосам с учётом пола и текущей нагрузки
     static func assignRoles(
-        subtitle: ImportedSubtitle,
+        counts: [String: Int],
         voices: [VoiceConfig],
         roleSettings: [RoleGenderSetting],
         language: AppLanguage
@@ -20,7 +12,6 @@ enum RoleAssignmentService {
             throw SubtitleError.exportFailed(L.text("error.noVoices", language))
         }
 
-        let counts: [String: Int] = roleReplicaCounts(subtitle: subtitle, language: language)
         let genderByRole: [String: VoiceGender] = Dictionary(
             uniqueKeysWithValues: roleSettings.map { setting in
                 (setting.role, setting.gender)

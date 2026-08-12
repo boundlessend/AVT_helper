@@ -135,6 +135,40 @@ struct ImportedSubtitle: Sendable {
     }
 }
 
+/// всё, что интерфейс знает о файле помимо самих реплик; считается один раз при импорте,
+/// чтобы производные величины не разъезжались между собой
+struct SubtitleDigest: Sendable {
+    let roles: [String]
+    let counts: [String: Int]
+    let lineCount: Int
+    let duration: TimeInterval
+
+    static let empty: SubtitleDigest = SubtitleDigest(roles: [], counts: [:], lineCount: 0, duration: 0)
+
+    init(roles: [String], counts: [String: Int], lineCount: Int, duration: TimeInterval) {
+        self.roles = roles
+        self.counts = counts
+        self.lineCount = lineCount
+        self.duration = duration
+    }
+
+    init(subtitle: ImportedSubtitle, language: AppLanguage) {
+        roles = subtitle.allRoles(language)
+        counts = subtitle.lines.reduce(into: [String: Int]()) { result, line in
+            for role in line.displayRoles(language) {
+                result[role, default: 0] += 1
+            }
+        }
+        lineCount = subtitle.lines.count
+        duration = subtitle.lines.map { line in line.end }.max() ?? 0
+    }
+
+    /// доля реплик роли от всего файла: она же длина полоски в списке ролей
+    func share(of role: String) -> Double {
+        lineCount == 0 ? 0 : Double(counts[role, default: 0]) / Double(lineCount)
+    }
+}
+
 struct ExportSettings: Sendable {
     let exportAss: Bool
     let exportSrt: Bool
