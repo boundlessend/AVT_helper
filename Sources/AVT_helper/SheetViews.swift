@@ -36,20 +36,21 @@ struct SheetRow: View {
     let line: SubtitleLine
     let language: AppLanguage
     let highlights: [String: WordHighlightColor]
+    let roleWidth: CGFloat
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Text(TimeTools.formatSrt(line.start))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.tertiary)
-                .frame(width: 86, alignment: .leading)
+                .frame(width: SheetMetrics.timingWidth, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(line.displayRoles(language), id: \.self) { role in
                     RoleTag(role: role, color: highlights[role])
                 }
             }
-            .frame(width: 150, alignment: .leading)
+            .frame(width: roleWidth, alignment: .leading)
 
             Text(line.text)
                 .font(.system(size: 13))
@@ -60,6 +61,16 @@ struct SheetRow: View {
     }
 }
 
+/// размеры колонок листа: тайминг всегда одной длины, а роль делит остаток с репликой
+enum SheetMetrics {
+    static let timingWidth: CGFloat = 86
+
+    /// колонка роли растёт вместе с окном, но не съедает реплику и не сжимается до нечитаемой
+    static func roleWidth(sheetWidth: CGFloat) -> CGFloat {
+        min(280, max(120, sheetWidth * 0.22))
+    }
+}
+
 /// монтажный лист импортированного файла
 struct SubtitleSheetView: View {
     let subtitle: ImportedSubtitle
@@ -67,31 +78,38 @@ struct SubtitleSheetView: View {
     let highlights: [String: WordHighlightColor]
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .bottom, spacing: 14) {
-                SectionLabel(text: L.text("col.timing", language))
-                    .frame(width: 86, alignment: .leading)
-                SectionLabel(text: L.text("col.role", language))
-                    .frame(width: 150, alignment: .leading)
-                SectionLabel(text: L.text("col.replica", language))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color.primary.opacity(0.65))
-                    .frame(height: 1)
-            }
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                HStack(alignment: .bottom, spacing: 14) {
+                    SectionLabel(text: L.text("col.timing", language))
+                        .frame(width: SheetMetrics.timingWidth, alignment: .leading)
+                    SectionLabel(text: L.text("col.role", language))
+                        .frame(width: SheetMetrics.roleWidth(sheetWidth: proxy.size.width), alignment: .leading)
+                    SectionLabel(text: L.text("col.replica", language))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.65))
+                        .frame(height: 1)
+                }
 
-            List(subtitle.lines) { line in
-                SheetRow(line: line, language: language, highlights: highlights)
+                List(subtitle.lines) { line in
+                    SheetRow(
+                        line: line,
+                        language: language,
+                        highlights: highlights,
+                        roleWidth: SheetMetrics.roleWidth(sheetWidth: proxy.size.width)
+                    )
                     .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
                     .listRowSeparator(.visible)
+                }
+                .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 22)
             }
-            .listStyle(.plain)
-            .environment(\.defaultMinListRowHeight, 22)
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
