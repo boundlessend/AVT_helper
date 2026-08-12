@@ -177,15 +177,4 @@ enum TextTools {
             return false
         }
     }
-
-    static func normalizeSex(_ input: String) -> String {
-        let value: String = input.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if ["М", "M", "МУЖ"].contains(value) {
-            return "МУЖ"
-        }
-        if ["Ж", "ЖЕН", "F"].contains(value) {
-            return "ЖЕН"
-        }
-        return "ОБЩ"
-    }
 }

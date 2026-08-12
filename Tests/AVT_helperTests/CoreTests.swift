@@ -113,7 +113,7 @@ final class CoreTests: XCTestCase {
             (0..<count).map { index in
                 SubtitleLine(
                     id: UUID(), start: TimeInterval(index), end: TimeInterval(index) + 1,
-                    roles: [role], text: "line", style: "", effect: "", sex: ""
+                    roles: [role], text: "line", style: "", effect: "", sex: .unknown
                 )
             }
         }
@@ -168,7 +168,7 @@ final class CoreTests: XCTestCase {
             lines: [
                 SubtitleLine(
                     id: UUID(), start: 1, end: 2, roles: ["Анна"],
-                    text: "Привет\u{0B}мир\u{01}", style: "", effect: "", sex: ""
+                    text: "Привет\u{0B}мир\u{01}", style: "", effect: "", sex: .unknown
                 )
             ]
         )
@@ -197,8 +197,8 @@ final class CoreTests: XCTestCase {
             sourcePath: "",
             sourceType: .srt,
             lines: [
-                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["A:B"], text: "one", style: "", effect: "", sex: ""),
-                SubtitleLine(id: UUID(), start: 3, end: 4, roles: ["A*B"], text: "two", style: "", effect: "", sex: ""),
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["A:B"], text: "one", style: "", effect: "", sex: .unknown),
+                SubtitleLine(id: UUID(), start: 3, end: 4, roles: ["A*B"], text: "two", style: "", effect: "", sex: .unknown),
             ]
         )
         let settings = ExportSettings(
@@ -240,7 +240,7 @@ final class CoreTests: XCTestCase {
             sourcePath: "",
             sourceType: .ass,
             lines: [
-                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: "")
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: .unknown)
             ]
         )
         var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
@@ -257,7 +257,7 @@ final class CoreTests: XCTestCase {
         let lines = (0..<500).map { index in
             SubtitleLine(
                 id: UUID(), start: TimeInterval(index), end: TimeInterval(index) + 1,
-                roles: ["Анна"], text: "строка \(index)", style: "", effect: "", sex: ""
+                roles: ["Анна"], text: "строка \(index)", style: "", effect: "", sex: .unknown
             )
         }
         let subtitle = ImportedSubtitle(baseName: "progress", sourcePath: "", sourceType: .srt, lines: lines)
@@ -318,7 +318,7 @@ final class CoreTests: XCTestCase {
 
         XCTAssertEqual(imported.lines.count, 2)
         XCTAssertEqual(imported.lines.first?.roles, ["Анна"])
-        XCTAssertEqual(imported.lines.first?.sex, "ЖЕН")
+        XCTAssertEqual(imported.lines.first?.sex, .female)
         XCTAssertEqual(imported.lines.first?.text, "Привет мир")
         XCTAssertEqual(imported.lines.last?.roles, [])
         XCTAssertEqual(imported.lines.last?.displayRoles(.ru), ["Не назначено"])
@@ -334,7 +334,7 @@ final class CoreTests: XCTestCase {
             sourcePath: "",
             sourceType: .srt,
             lines: [
-                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна", "Борис"], text: "хором", style: "", effect: "", sex: "")
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна", "Борис"], text: "хором", style: "", effect: "", sex: .unknown)
             ]
         )
         var paths = OutputPathAllocator(sourcePath: "")
@@ -415,8 +415,8 @@ final class CoreTests: XCTestCase {
             sourcePath: "",
             sourceType: .srt,
             lines: [
-                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "Первая", style: "", effect: "", sex: ""),
-                SubtitleLine(id: UUID(), start: 3, end: 4, roles: [], text: "Вторая", style: "", effect: "", sex: ""),
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "Первая", style: "", effect: "", sex: .unknown),
+                SubtitleLine(id: UUID(), start: 3, end: 4, roles: [], text: "Вторая", style: "", effect: "", sex: .unknown),
             ]
         )
         var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
@@ -517,7 +517,7 @@ final class CoreTests: XCTestCase {
             lines: [
                 SubtitleLine(
                     id: UUID(), start: 1, end: 2, roles: ["Анна"],
-                    text: "Привет", style: "", effect: "", sex: ""
+                    text: "Привет", style: "", effect: "", sex: .unknown
                 )
             ]
         )

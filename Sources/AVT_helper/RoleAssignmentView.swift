@@ -232,23 +232,12 @@ struct RoleAssignmentView: View {
 
     private func roleGenderHints() -> [String: VoiceGender] {
         subtitle.lines.reduce(into: [String: VoiceGender]()) { result, line in
-            guard let gender: VoiceGender = genderHint(sex: line.sex) else {
+            guard let gender: VoiceGender = line.sex.voiceGender else {
                 return
             }
             for role in line.displayRoles(language) where result[role] == nil {
                 result[role] = gender
             }
-        }
-    }
-
-    private func genderHint(sex: String) -> VoiceGender? {
-        switch sex {
-        case "МУЖ":
-            return .male
-        case "ЖЕН":
-            return .female
-        default:
-            return nil
         }
     }
 

@@ -132,7 +132,7 @@ enum SubtitleImporter {
                 text: TextTools.cleanAssText(String(parts[9])),
                 style: style,
                 effect: effect,
-                sex: ""
+                sex: .unknown
             )
         }
     }
@@ -201,7 +201,7 @@ enum SubtitleImporter {
         return try nodes.compactMap { node in
             try counter.step()
             let roles: [String] = TextTools.normalizedRoles([childText(node: node, name: "Character")])
-            let sex: String = TextTools.normalizeSex(childText(node: node, name: "Sex"))
+            let sex: SourceSex = SourceSex.parse(childText(node: node, name: "Sex"))
             let rawText: String = childText(node: node, name: "Text")
                 .replacingOccurrences(of: "\\N", with: " ")
                 .replacingOccurrences(of: "\\n", with: " ")
@@ -246,7 +246,7 @@ enum SubtitleImporter {
         if voiceRoles.isEmpty {
             return buildLine(start: start, end: end, rawText: cleanText)
         }
-        return SubtitleLine(id: UUID(), start: start, end: end, roles: voiceRoles, text: cleanText, style: "", effect: "", sex: "")
+        return SubtitleLine(id: UUID(), start: start, end: end, roles: voiceRoles, text: cleanText, style: "", effect: "", sex: .unknown)
     }
 
     private static func buildLine(start: TimeInterval, end: TimeInterval, rawText: String) -> SubtitleLine {
@@ -255,7 +255,7 @@ enum SubtitleImporter {
             let cleaned: String = TextTools.removeLeadingBracketRoles(rawText)
             return cleaned.isEmpty ? rawText : cleaned
         }()
-        return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: cleanText, style: "", effect: "", sex: "")
+        return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: cleanText, style: "", effect: "", sex: .unknown)
     }
 
     private static func normalizedBlocks(text: String) -> [String] {

@@ -97,6 +97,37 @@ enum SubtitleSourceType: String, Sendable {
     case srp = "SRP"
 }
 
+/// пол персонажа, заявленный источником; SRP приносит его прямо в файле, остальные форматы не приносят вовсе
+enum SourceSex: String, CaseIterable, Sendable {
+    case male
+    case female
+    case unknown
+
+    /// разбирает пометку пола SRP: там пишут «М», «МУЖ», «Ж», «ЖЕН»
+    static func parse(_ input: String) -> SourceSex {
+        switch input.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "М", "M", "МУЖ":
+            return .male
+        case "Ж", "ЖЕН", "F":
+            return .female
+        default:
+            return .unknown
+        }
+    }
+
+    /// подсказка для разролёвки; неизвестный пол подсказки не даёт
+    var voiceGender: VoiceGender? {
+        switch self {
+        case .male:
+            return .male
+        case .female:
+            return .female
+        case .unknown:
+            return nil
+        }
+    }
+}
+
 struct SubtitleLine: Identifiable, Hashable, Sendable {
     let id: UUID
     let start: TimeInterval
@@ -106,7 +137,7 @@ struct SubtitleLine: Identifiable, Hashable, Sendable {
     let text: String
     let style: String
     let effect: String
-    let sex: String
+    let sex: SourceSex
 
     /// роли для показа и экспорта: нераспознанная роль подставляется меткой нужного языка
     func displayRoles(_ language: AppLanguage) -> [String] {
