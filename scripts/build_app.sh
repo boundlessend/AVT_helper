@@ -34,6 +34,9 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 cp "${EXECUTABLE_PATH}" "${MACOS_DIR}/${APP_NAME}"
 chmod +x "${MACOS_DIR}/${APP_NAME}"
 
+# ресурсный бандл SwiftPM с переводами: без него в интерфейсе останутся одни ключи
+cp -R "${ROOT_DIR}/.build/release/${APP_NAME}_${APP_NAME}.bundle" "${RESOURCES_DIR}/"
+
 # иконка собирается из одного исходника: хранить десять срезов в репозитории незачем
 rm -rf "${ICONSET_DIR}"
 mkdir -p "${ICONSET_DIR}"

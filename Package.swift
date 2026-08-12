@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "AVT_helper",
+    defaultLocalization: "ru",
     platforms: [
         .macOS(.v14)
     ],
@@ -13,6 +14,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "AVT_helper",
+            resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
         .testTarget(name: "AVT_helperTests", dependencies: ["AVT_helper"]),
