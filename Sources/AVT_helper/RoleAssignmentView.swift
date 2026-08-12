@@ -4,7 +4,7 @@ struct RoleAssignmentView: View {
     let subtitle: ImportedSubtitle
     let outputFolder: String
     let language: AppLanguage
-    let onComplete: (String, [String: WordHighlightColor]) -> Void
+    let onComplete: (String, RoleAssignmentResult) -> Void
 
     /// считается один раз при создании, чтобы не пересчитывать все реплики на каждый рендер списка
     private let roleCounts: [String: Int]
@@ -28,7 +28,7 @@ struct RoleAssignmentView: View {
         subtitle: ImportedSubtitle,
         outputFolder: String,
         language: AppLanguage,
-        onComplete: @escaping (String, [String: WordHighlightColor]) -> Void
+        onComplete: @escaping (String, RoleAssignmentResult) -> Void
     ) {
         self.subtitle = subtitle
         self.outputFolder = outputFolder
@@ -343,7 +343,7 @@ struct RoleAssignmentView: View {
                     )
                 }.value
                 isWorking = false
-                onComplete(path, result.roleToHighlight)
+                onComplete(path, result)
                 dismiss()
             } catch {
                 isWorking = false

@@ -114,6 +114,7 @@ enum L {
         "voiceCount": [.ru: "Количество голосов", .en: "Voice count"],
         "voices": [.ru: "Голоса", .en: "Voices"],
         "voice": [.ru: "Голос", .en: "Voice"],
+        "voiceShort": [.ru: "Г", .en: "V"],
         "highlightColor": [.ru: "Цвет выделения", .en: "Highlight color"],
         "gender": [.ru: "Пол", .en: "Gender"],
         "roles": [.ru: "Роли", .en: "Roles"],

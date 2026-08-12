@@ -135,6 +135,8 @@ struct RoleRow: View {
     let count: Int
     let share: Double
     let color: WordHighlightColor?
+    /// номер назначенного голоса; до разролёвки его нет
+    let voice: Int?
     let language: AppLanguage
     @Binding var isSelected: Bool
 
@@ -159,6 +161,16 @@ struct RoleRow: View {
                 }
                 .toggleStyle(.checkbox)
                 Spacer(minLength: 8)
+                if let voice: Int = voice {
+                    Text("\(L.text("voiceShort", language))\(voice)")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 3).strokeBorder(.quaternary, lineWidth: 1)
+                        }
+                }
                 Text("\(count)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)

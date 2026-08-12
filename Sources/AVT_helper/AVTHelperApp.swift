@@ -56,6 +56,8 @@ final class ProcessingModel: ObservableObject {
     @Published var roleCounts: [String: Int] = [:]
     /// цвет маркера для каждой роли: после импорта автоматический, после разролёвки - цвет назначенного голоса
     @Published var roleHighlights: [String: WordHighlightColor] = [:]
+    /// голос каждой роли после разролёвки: цвет один на голос, поэтому номер нужен, чтобы их различать
+    @Published var roleVoices: [String: Int] = [:]
     /// хронометраж файла, посчитанный один раз при импорте
     @Published var duration: TimeInterval = 0
     @Published var status: String = ""
@@ -105,6 +107,7 @@ final class ProcessingModel: ObservableObject {
             roles = imported.allRoles(language)
             roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: language)
             roleHighlights = RoleColors.automatic(roles: roles)
+            roleVoices = [:]
             duration = imported.lines.map { line in line.end }.max() ?? 0
             log("\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue).")
         } catch is CancellationError {
@@ -152,6 +155,7 @@ final class ProcessingModel: ObservableObject {
         roles = []
         roleCounts = [:]
         roleHighlights = [:]
+        roleVoices = [:]
         duration = 0
     }
 
@@ -282,9 +286,10 @@ struct ContentView: View {
                     subtitle: subtitle,
                     outputFolder: outputFolder,
                     language: language,
-                    onComplete: { path, highlights in
+                    onComplete: { path, assignment in
                         model.lastCreatedFiles = [path]
-                        model.roleHighlights = highlights
+                        model.roleHighlights = assignment.roleToHighlight
+                        model.roleVoices = assignment.roleToVoice
                         model.log("\(t("createdAssignment")): \(path)")
                         showDoneAlert = true
                     }
@@ -456,6 +461,7 @@ struct ContentView: View {
                             count: model.roleCounts[role, default: 0],
                             share: roleShare(role),
                             color: model.roleHighlights[role],
+                            voice: model.roleVoices[role],
                             language: language,
                             isSelected: roleSelection(role)
                         )
