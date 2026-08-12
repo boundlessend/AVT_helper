@@ -303,6 +303,30 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(imported.lines.last?.start ?? 0, 3, accuracy: 0.0001)
     }
 
+    func testRoleSpellingIsCanonicalizedAcrossFile() throws {
+        let body = """
+            1
+            00:00:01,000 --> 00:00:02,000
+            [Анна] раз
+
+            2
+            00:00:03,000 --> 00:00:04,000
+            [АННА] два
+
+            3
+            00:00:05,000 --> 00:00:06,000
+            [анна] три
+            """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).srt")
+        try Data(body.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
+
+        XCTAssertEqual(imported.allRoles(.ru), ["Анна"])
+        XCTAssertEqual(RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: .ru), ["Анна": 3])
+    }
+
     func testSrpRejectsExternalEntities() throws {
         let secret = FileManager.default.temporaryDirectory.appendingPathComponent("avt_secret_\(UUID().uuidString).txt")
         try Data("СЕКРЕТ".utf8).write(to: secret)

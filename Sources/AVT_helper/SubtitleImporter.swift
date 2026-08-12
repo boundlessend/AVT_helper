@@ -28,7 +28,7 @@ enum SubtitleImporter {
             baseName: url.deletingPathExtension().lastPathComponent,
             sourcePath: url.standardizedFileURL.path,
             sourceType: sourceType,
-            lines: lines.sorted { left, right in
+            lines: canonicalizedRoles(lines).sorted { left, right in
                 if left.start == right.start {
                     return left.end < right.end
                 }
@@ -213,6 +213,29 @@ enum SubtitleImporter {
                 return nil
             }
             return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: rawText, style: "", effect: "", sex: sex)
+        }
+    }
+
+    /// сводит написания одной роли к первому встреченному: иначе «Анна» и «АННА» живут как две роли
+    /// с раздельными счётчиками, цветами и файлами
+    private static func canonicalizedRoles(_ lines: [SubtitleLine]) -> [SubtitleLine] {
+        var canonical: [String: String] = [:]
+        for line in lines {
+            for role in line.roles where canonical[role.lowercased()] == nil {
+                canonical[role.lowercased()] = role
+            }
+        }
+        return lines.map { line in
+            SubtitleLine(
+                id: line.id,
+                start: line.start,
+                end: line.end,
+                roles: TextTools.normalizedRoles(line.roles.map { role in canonical[role.lowercased()] ?? role }),
+                text: line.text,
+                style: line.style,
+                effect: line.effect,
+                sex: line.sex
+            )
         }
     }
 
