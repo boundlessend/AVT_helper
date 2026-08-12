@@ -303,6 +303,25 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(imported.lines.last?.start ?? 0, 3, accuracy: 0.0001)
     }
 
+    func testAssKeepsEveryRoleOfAChorusLine() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "chorus",
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна", "Борис"], text: "хором", style: "", effect: "", sex: "")
+            ]
+        )
+        var paths = OutputPathAllocator(sourcePath: "")
+
+        let created = try SubtitleExporter.exportAss(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+        let reimported = try SubtitleImporter.importFile(path: created, language: .ru)
+
+        XCTAssertEqual(reimported.lines.first?.roles, ["Анна", "Борис"])
+    }
+
     func testRoleSpellingIsCanonicalizedAcrossFile() throws {
         let body = """
             1

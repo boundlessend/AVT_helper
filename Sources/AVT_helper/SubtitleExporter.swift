@@ -155,7 +155,7 @@ enum SubtitleExporter {
         for line in subtitle.lines {
             try counter.step()
             let style: String = escapeAssField(line.style.isEmpty ? "Default" : line.style)
-            let role: String = escapeAssField(line.displayRoles(language)[0])
+            let role: String = escapeAssField(line.displayRoles(language).joined(separator: TextTools.assRoleSeparator))
             output += "Dialogue: 0,\(TimeTools.formatAss(line.start)),\(TimeTools.formatAss(line.end)),\(style),\(role),0,0,0,,\(TextTools.escapeAssText(line.text))\n"
         }
         try output.write(toFile: path, atomically: true, encoding: .utf8)
@@ -175,9 +175,10 @@ enum SubtitleExporter {
         try output.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
-    /// убирает запятые из полей строки Dialogue, иначе они ломают разбор формата ASS
+    /// убирает запятые из полей строки Dialogue, иначе они ломают разбор формата ASS;
+    /// подстановка та же, что у импорта, поэтому имя переживает круг без изменений
     private static func escapeAssField(_ input: String) -> String {
-        input.replacingOccurrences(of: ",", with: " ")
+        input.replacingOccurrences(of: ",", with: "_")
     }
 
     private static func writeSrt(

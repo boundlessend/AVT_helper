@@ -15,6 +15,10 @@ enum TextTools {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// в ASS поле Name одно, а реплику могут произносить хором: роли пишутся через этот разделитель
+    /// и по нему же читаются обратно, потому что cleanRoleName его не трогает
+    static let assRoleSeparator: String = "|"
+
     /// приводит список сырых имён к очищенным уникальным ролям без учёта регистра
     static func normalizedRoles(_ input: [String]) -> [String] {
         var seen: Set<String> = []

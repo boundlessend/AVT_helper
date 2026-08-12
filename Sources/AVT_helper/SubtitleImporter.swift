@@ -128,7 +128,7 @@ enum SubtitleImporter {
                 id: UUID(),
                 start: start,
                 end: end,
-                roles: TextTools.normalizedRoles([role]),
+                roles: TextTools.normalizedRoles(role.components(separatedBy: TextTools.assRoleSeparator)),
                 text: TextTools.cleanAssText(String(parts[9])),
                 style: style,
                 effect: effect,
