@@ -92,6 +92,35 @@ enum TextTools {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// имена говорящих из тегов <v Имя> в начале строк WebVTT: штатная разметка роли этого формата
+    static func extractVoiceTagRoles(_ input: String) -> [String] {
+        guard let regex: NSRegularExpression = try? NSRegularExpression(pattern: #"^\s*<v(?:\.[^\s>]+)*\s+([^>]+)>"#) else {
+            return []
+        }
+        let names: [String] = normalizedLines(input).compactMap { line in
+            let range: NSRange = NSRange(line.startIndex..<line.endIndex, in: line)
+            guard let match: NSTextCheckingResult = regex.firstMatch(in: line, range: range),
+                let groupRange: Range<String.Index> = Range(match.range(at: 1), in: line)
+            else {
+                return nil
+            }
+            return String(line[groupRange])
+        }
+        return normalizedRoles(names)
+    }
+
+    /// снимает разметку WebVTT и разворачивает её сущности: в реплике должен остаться только текст
+    static func cleanVttText(_ input: String) -> String {
+        let withoutTags: String = input.replacingOccurrences(of: #"</?[^>]+>"#, with: "", options: [.regularExpression])
+        return
+            withoutTags
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func normalizedLines(_ input: String) -> [String] {
         input
             .replacingOccurrences(of: "\r\n", with: "\n")

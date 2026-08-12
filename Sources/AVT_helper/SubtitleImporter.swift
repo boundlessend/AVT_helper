@@ -184,7 +184,7 @@ enum SubtitleImporter {
                 return nil
             }
             let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            return buildLine(start: start, end: end, rawText: rawText)
+            return buildVttLine(start: start, end: end, rawText: rawText)
         }
     }
 
@@ -237,6 +237,16 @@ enum SubtitleImporter {
                 sex: line.sex
             )
         }
+    }
+
+    /// в WebVTT роль размечают тегом <v Имя>, но встречаются и квадратные скобки: принимаются оба способа
+    private static func buildVttLine(start: TimeInterval, end: TimeInterval, rawText: String) -> SubtitleLine {
+        let voiceRoles: [String] = TextTools.extractVoiceTagRoles(rawText)
+        let cleanText: String = TextTools.cleanVttText(rawText)
+        if voiceRoles.isEmpty {
+            return buildLine(start: start, end: end, rawText: cleanText)
+        }
+        return SubtitleLine(id: UUID(), start: start, end: end, roles: voiceRoles, text: cleanText, style: "", effect: "", sex: "")
     }
 
     private static func buildLine(start: TimeInterval, end: TimeInterval, rawText: String) -> SubtitleLine {

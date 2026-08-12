@@ -84,6 +84,28 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(imported.allRoles(.ru).contains("Анна"))
     }
 
+    func testVttVoiceTagBecomesRole() throws {
+        let body = """
+            WEBVTT
+
+            1
+            00:00:01.000 --> 00:00:02.000
+            <v Анна>Привет, <i>мир</i> &amp; все
+
+            2
+            00:00:03.000 --> 00:00:04.000
+            <v.loud Борис>Пока
+            """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).vtt")
+        try Data(body.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
+
+        XCTAssertEqual(imported.allRoles(.ru), ["Анна", "Борис"])
+        XCTAssertEqual(imported.lines.first?.text, "Привет, мир & все")
+    }
+
     func testAssignRolesRespectsGenderAndLoad() throws {
         let lines: [SubtitleLine] = [
             ("Hero", 6), ("Sidekick", 2), ("Queen", 3),
