@@ -9,7 +9,7 @@ struct AVTHelperApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 900, minHeight: 640)
+                .frame(minWidth: 1000, minHeight: 640)
         }
         .windowStyle(.titleBar)
         .commands {
@@ -54,6 +54,10 @@ final class ProcessingModel: ObservableObject {
     @Published var importedSubtitle: ImportedSubtitle?
     @Published var roles: [String] = []
     @Published var roleCounts: [String: Int] = [:]
+    /// цвет маркера для каждой роли: после импорта автоматический, после разролёвки - цвет назначенного голоса
+    @Published var roleHighlights: [String: WordHighlightColor] = [:]
+    /// хронометраж файла, посчитанный один раз при импорте
+    @Published var duration: TimeInterval = 0
     @Published var status: String = ""
     @Published var isWorking: Bool = false
     @Published var progress: Double = 0
@@ -92,6 +96,8 @@ final class ProcessingModel: ObservableObject {
             importedSubtitle = imported
             roles = imported.allRoles(language)
             roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: imported, language: language)
+            roleHighlights = RoleColors.automatic(roles: roles)
+            duration = imported.lines.map { line in line.end }.max() ?? 0
             log("\(L.text("imported", language)) \(imported.lines.count) \(L.text("lines", language)) \(imported.sourceType.rawValue).")
         } catch is CancellationError {
             forgetInput()
@@ -137,6 +143,8 @@ final class ProcessingModel: ObservableObject {
         importedSubtitle = nil
         roles = []
         roleCounts = [:]
+        roleHighlights = [:]
+        duration = 0
     }
 
     private func finishWork() {
@@ -149,7 +157,6 @@ final class ProcessingModel: ObservableObject {
 struct ContentView: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
     @StateObject private var model: ProcessingModel = ProcessingModel()
-    @State private var inputPath: String = ""
     @AppStorage("outputFolder") private var outputFolder: String =
         FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
         ?? NSHomeDirectory()
@@ -199,53 +206,38 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.vertical) {
-                VStack(spacing: 14) {
-                    headerPanel
-
-                    HStack(alignment: .top, spacing: 14) {
-                        pathsPanel
-                        exportPanel
-                        srtPanel
-                    }
-
-                    rolesPanel
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity)
+            HStack(spacing: 0) {
+                rail
+                Divider()
+                sheetColumn
+                Divider()
+                rolesColumn
             }
-
-            HStack(spacing: 10) {
-                if model.isWorking {
-                    ProgressView(value: model.progress)
-                        .frame(width: 130)
-                    Text("\(Int(model.progress * 100))%")
-                        .monospacedDigit()
-                    Button(t("cancel")) {
-                        model.cancel()
-                    }
-                }
-                Button {
-                    showHistory = true
-                } label: {
-                    Text(model.status.isEmpty ? t("ready") : model.status)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                .buttonStyle(.plain)
-                .help(t("history.hint"))
-                .popover(isPresented: $showHistory, arrowEdge: .top) {
-                    historyPopover
-                }
-                Spacer()
-                Text("@boundlessend")
-                    .fontWeight(.semibold)
-            }
-            .font(.footnote)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: .windowBackgroundColor))
+            Divider()
+            statusBar
         }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    chooseInputFile()
+                } label: {
+                    Label(t("openSubtitles"), systemImage: "doc.badge.plus")
+                }
+                .disabled(model.isWorking)
+                .help(t("openSubtitles"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showRoleAssignment = true
+                } label: {
+                    Label(t("makeRoleAssignment"), systemImage: "person.2")
+                }
+                .disabled(model.isWorking || model.importedSubtitle == nil || model.roles.isEmpty)
+                .help(t("makeRoleAssignment"))
+            }
+        }
+        .navigationTitle(model.importedSubtitle?.baseName ?? "AVT_helper")
+        .navigationSubtitle(windowSubtitle)
         .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { _ in
             if !model.isWorking {
                 chooseInputFile()
@@ -268,47 +260,253 @@ struct ContentView: View {
                     subtitle: subtitle,
                     outputFolder: outputFolder,
                     language: language,
-                    onComplete: { path in
+                    onComplete: { path, highlights in
                         model.lastCreatedFiles = [path]
+                        model.roleHighlights = highlights
                         model.log("\(t("createdAssignment")): \(path)")
                         showDoneAlert = true
                     }
                 )
-                .frame(minWidth: 860, minHeight: 620)
+                .frame(minWidth: 880, minHeight: 620)
             }
         }
     }
 
-    private var headerPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("AVT_helper")
-                    .font(.largeTitle.weight(.bold))
-                Text("ASS / SSA / SRT / VTT / SRP → ASS / SRT / VTT / DOCX")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button(t("openSubtitles")) {
-                        chooseInputFile()
+    /// подзаголовок окна: состав файла держится в титуле, чтобы не занимать место в самом листе
+    private var windowSubtitle: String {
+        guard let subtitle: ImportedSubtitle = model.importedSubtitle else {
+            return ""
+        }
+        let lines: String = "\(subtitle.lines.count) \(t("lines"))"
+        let roles: String = "\(model.roles.count) \(t("rolesCountSuffix"))"
+        return "\(lines) · \(roles) · \(subtitle.sourceType.rawValue) · \(TimeTools.formatClockSeconds(model.duration))"
+    }
+
+    /// левый рельс: всё, что задаёт выгрузку, собрано в одном столбце и не спорит с листом за внимание
+    private var rail: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 18) {
+                sourceSection
+                outputSection
+                formatsSection
+                srtSection
+                afterSection
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: 238)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .disabled(model.isWorking)
+    }
+
+    private var sourceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: t("source"))
+            Button {
+                chooseInputFile()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.importedSubtitle.map { subtitle in subtitle.baseName } ?? t("notSelected"))
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .multilineTextAlignment(.leading)
+                        .foregroundStyle(model.importedSubtitle == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    if let subtitle: ImportedSubtitle = model.importedSubtitle {
+                        Text("\(subtitle.sourceType.rawValue) · \(subtitle.lines.count) \(t("lines"))")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
                     }
-                    Button(t("chooseOutputFolder")) {
-                        chooseOutputFolder()
-                    }
-                    Button(t("start")) {
-                        runExport()
-                    }
-                    .keyboardShortcut(.return)
-                    .disabled(startBlockReason != nil)
-                    .help(startBlockReason ?? t("start"))
-                    Button(t("makeRoleAssignment")) {
-                        showRoleAssignment = true
-                    }
-                    .disabled(model.importedSubtitle == nil || model.roles.isEmpty)
-                    Spacer(minLength: 0)
                 }
-                .disabled(model.isWorking)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .help(t("openSubtitles"))
+        }
+    }
+
+    private var outputSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: t("outputFolder"))
+            HStack(spacing: 6) {
+                TextField(t("outputFolder"), text: $outputFolder)
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .font(.system(size: 11, design: .monospaced))
+                    .accessibilityLabel(t("outputFolder"))
+                Button {
+                    chooseOutputFolder()
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .help(t("chooseOutputFolder"))
+            }
+            if !outputFolderExists {
+                Label(t("hint.badOutputFolder"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var formatsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: t("export"))
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+                FormatToggle(title: "SRT", isOn: $exportSrt)
+                FormatToggle(title: "DOCX", isOn: $exportDocx)
+                FormatToggle(title: "ASS", isOn: $exportAss)
+                FormatToggle(title: "VTT", isOn: $exportVtt)
+            }
+        }
+    }
+
+    private var srtSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: t("srtSettings"))
+            VStack(alignment: .leading, spacing: 7) {
+                Toggle(t("fullWithRoles"), isOn: $srtFullWithRoles)
+                Toggle(t("separateByRole"), isOn: $srtSeparateFiles)
+                Toggle(t("separateWithPrefix"), isOn: $srtSeparateWithRoles)
+            }
+            .font(.system(size: 12))
+        }
+    }
+
+    private var afterSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: t("afterProcessing"))
+            VStack(alignment: .leading, spacing: 7) {
+                Toggle(t("openFolderAfter"), isOn: $openFolderAfterProcessing)
+                Toggle(t("closeAppAfter"), isOn: $closeProgramAfterProcessing)
+            }
+            .font(.system(size: 12))
+        }
+    }
+
+    /// центральная колонка: сам монтажный лист, он же зона перетаскивания
+    private var sheetColumn: some View {
+        Group {
+            if let subtitle: ImportedSubtitle = model.importedSubtitle {
+                SubtitleSheetView(subtitle: subtitle, language: language, highlights: model.roleHighlights)
+            } else {
+                SheetEmptyView(language: language, isDropTargeted: isDropTargeted, onOpen: chooseInputFile)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDroppedFiles(urls)
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
+        }
+        .accessibilityLabel(t("inputFile"))
+    }
+
+    private var rolesColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionLabel(text: "\(t("roles")) · \(model.roles.count)")
+                Spacer()
+                Button(t("selectAll")) {
+                    selectedRoles = Set(model.roles)
+                }
+                Button(t("selectNone")) {
+                    selectedRoles = []
+                }
+            }
+            .controlSize(.small)
+            .disabled(model.roles.isEmpty)
+
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 7) {
+                    ForEach(model.roles, id: \.self) { role in
+                        RoleRow(
+                            role: role,
+                            count: model.roleCounts[role, default: 0],
+                            share: roleShare(role),
+                            color: model.roleHighlights[role],
+                            language: language,
+                            isSelected: roleSelection(role)
+                        )
+                    }
+                }
+                .padding(.trailing, 2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay {
+                if model.roles.isEmpty {
+                    Text(t("roles.empty"))
+                        .font(.system(size: 12))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Text(t("roles.colorHint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(width: 262)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .disabled(model.isWorking)
+    }
+
+    private var statusBar: some View {
+        HStack(spacing: 10) {
+            if model.isWorking {
+                ProgressView(value: model.progress)
+                    .frame(width: 120)
+                Text("\(Int(model.progress * 100))%")
+                    .monospacedDigit()
+                Button(t("cancel")) {
+                    model.cancel()
+                }
+                .controlSize(.small)
+            }
+            Button {
+                showHistory = true
+            } label: {
+                Text(model.status.isEmpty ? t("ready") : model.status)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .buttonStyle(.plain)
+            .help(t("history.hint"))
+            .popover(isPresented: $showHistory, arrowEdge: .top) {
+                historyPopover
+            }
+            Spacer()
+            Text("@boundlessend")
+                .fontWeight(.semibold)
+                .foregroundStyle(.tertiary)
+            Button(t("start")) {
+                runExport()
+            }
+            .keyboardShortcut(.return)
+            .disabled(model.isWorking || startBlockReason != nil)
+            .help(startBlockReason ?? t("start"))
+        }
+        .font(.footnote)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// доля реплик роли от всего файла: она же длина полоски в списке ролей
+    private func roleShare(_ role: String) -> Double {
+        let total: Int = model.importedSubtitle?.lines.count ?? 0
+        if total == 0 {
+            return 0
+        }
+        return Double(model.roleCounts[role, default: 0]) / Double(total)
     }
 
     /// журнал сообщений: в статус-баре видно только последнее, а ошибка нужна и после следующего события
@@ -337,52 +535,6 @@ struct ContentView: View {
         .frame(width: 420)
     }
 
-    private var rolesPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("\(t("roles")) (\(model.roles.count))")
-                        .font(.headline)
-                    Spacer()
-                    Button(t("selectAll")) {
-                        selectedRoles = Set(model.roles)
-                    }
-                    Button(t("selectNone")) {
-                        selectedRoles = []
-                    }
-                }
-                .disabled(model.roles.isEmpty)
-
-                List(model.roles, id: \.self) { role in
-                    HStack {
-                        Toggle(isOn: roleSelection(role)) {
-                            Text(role)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        .toggleStyle(.checkbox)
-                        Spacer(minLength: 12)
-                        Text("\(model.roleCounts[role, default: 0]) \(t("lineCountSuffix"))")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                .frame(height: 240)
-                .overlay {
-                    if model.roles.isEmpty {
-                        Text(t("roles.empty"))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(t("rolesSelectionHint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
     /// чекбокс роли: набор выбранных ролей нужен раздельному экспорту SRT
     private func roleSelection(_ role: String) -> Binding<Bool> {
         Binding(
@@ -397,97 +549,6 @@ struct ContentView: View {
         )
     }
 
-    private var pathsPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("paths"))
-                    .font(.headline)
-                Text(t("inputFile"))
-                    .foregroundStyle(.secondary)
-                inputDropZone
-                Text(t("outputFolder"))
-                    .foregroundStyle(.secondary)
-                TextField(t("outputFolder"), text: $outputFolder)
-                    .textFieldStyle(.roundedBorder)
-                    .labelsHidden()
-                    .accessibilityLabel(t("outputFolder"))
-                if !outputFolderExists {
-                    Label(t("hint.badOutputFolder"), systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text("\(t("source")): \(model.importedSubtitle?.sourceType.rawValue ?? t("notSelected"))")
-                    .fontWeight(.semibold)
-            }
-        }
-    }
-
-    private var inputDropZone: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(inputPath.isEmpty ? t("dropHint") : inputPath)
-                .lineLimit(3)
-                .truncationMode(.middle)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("ASS, SSA, SRT, VTT, SRP")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-        .background(isDropTargeted ? Color.accentColor.opacity(0.15) : Color(nsColor: .textBackgroundColor))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(style: StrokeStyle(lineWidth: isDropTargeted ? 2 : 1, dash: [6, 4]))
-                .foregroundStyle(isDropTargeted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .dropDestination(for: URL.self) { urls, _ in
-            handleDroppedFiles(urls)
-        } isTargeted: { targeted in
-            isDropTargeted = targeted
-        }
-        .accessibilityLabel(t("inputFile"))
-    }
-
-    private var exportPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("export"))
-                    .font(.headline)
-                Toggle(t("toAss"), isOn: $exportAss)
-                Toggle(t("toSrt"), isOn: $exportSrt)
-                Toggle(t("toVtt"), isOn: $exportVtt)
-                Toggle(t("toDocx"), isOn: $exportDocx)
-                Divider()
-                Toggle(t("openFolderAfter"), isOn: $openFolderAfterProcessing)
-                Toggle(t("closeAppAfter"), isOn: $closeProgramAfterProcessing)
-            }
-        }
-    }
-
-    private var srtPanel: some View {
-        panel {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("srtSettings"))
-                    .font(.headline)
-                Toggle(t("fullWithRoles"), isOn: $srtFullWithRoles)
-                Toggle(t("separateByRole"), isOn: $srtSeparateFiles)
-                Toggle(t("separateWithPrefix"), isOn: $srtSeparateWithRoles)
-            }
-        }
-    }
-
-    private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
     private func chooseInputFile() {
         let panel: NSOpenPanel = NSOpenPanel()
         panel.allowsMultipleSelection = false
@@ -496,7 +557,6 @@ struct ContentView: View {
             UTType(filenameExtension: ext)
         }
         if panel.runModal() == .OK, let url: URL = panel.url {
-            inputPath = url.path
             reloadInput(path: url.path)
         }
     }
@@ -566,7 +626,6 @@ struct ContentView: View {
         if urls.count > 1 {
             model.log(t("dropSingleFileOnly"))
         }
-        inputPath = first.path
         reloadInput(path: first.path)
         return true
     }

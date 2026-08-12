@@ -132,9 +132,9 @@ enum DocxExporter {
     private static func headerRow(language: AppLanguage) -> String {
         """
         <w:tr>
-          \(tableCell(L.text("docx.timing", language), width: "1100", bold: true, alignment: "center", highlight: nil))
-          \(tableCell(L.text("docx.role", language), width: "1800", bold: true, alignment: "center", highlight: nil))
-          \(tableCell(L.text("docx.replica", language), width: "8200", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("col.timing", language), width: "1100", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("col.role", language), width: "1800", bold: true, alignment: "center", highlight: nil))
+          \(tableCell(L.text("col.replica", language), width: "8200", bold: true, alignment: "center", highlight: nil))
         </w:tr>
         """
     }

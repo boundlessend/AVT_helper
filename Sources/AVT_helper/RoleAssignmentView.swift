@@ -4,7 +4,7 @@ struct RoleAssignmentView: View {
     let subtitle: ImportedSubtitle
     let outputFolder: String
     let language: AppLanguage
-    let onComplete: (String) -> Void
+    let onComplete: (String, [String: WordHighlightColor]) -> Void
 
     /// считается один раз при создании, чтобы не пересчитывать все реплики на каждый рендер списка
     private let roleCounts: [String: Int]
@@ -16,6 +16,8 @@ struct RoleAssignmentView: View {
     ]
     @State private var voiceCount: Int = 2
     @State private var roleSettings: [RoleGenderSetting] = []
+    /// распределение при текущих настройках; пересчитывается по действию, а не в body
+    @State private var preview: RoleAssignmentResult?
     @State private var errorMessage: String = ""
     @State private var isWorking: Bool = false
     @State private var progress: Double = 0
@@ -24,7 +26,7 @@ struct RoleAssignmentView: View {
         subtitle: ImportedSubtitle,
         outputFolder: String,
         language: AppLanguage,
-        onComplete: @escaping (String) -> Void
+        onComplete: @escaping (String, [String: WordHighlightColor]) -> Void
     ) {
         self.subtitle = subtitle
         self.outputFolder = outputFolder
@@ -45,54 +47,137 @@ struct RoleAssignmentView: View {
         Set(voices.map { voice in voice.color }).count != voices.count
     }
 
+    private var previewHighlights: [String: WordHighlightColor] {
+        preview?.roleToHighlight ?? [:]
+    }
+
     private func t(_ key: String) -> String {
         L.text(key, language)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            WindowHeader(
-                title: t("roleAssignment"),
-                systemImage: nil,
-                closeTitle: t("close"),
-                onClose: { dismiss() }
-            )
-
-            Stepper("\(t("voiceCount")): \(voiceCount)", value: $voiceCount, in: 1...12)
-                .onChange(of: voiceCount) { _, newValue in
-                    adjustVoices(count: newValue)
-                }
-
-            voiceTable
-
-            Text(t("roles"))
-                .font(.headline)
-            roleTable
-
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            voicePanel
+            rolePanel
             messages
-
-            HStack(spacing: 10) {
-                Spacer()
-                if isWorking {
-                    ProgressView(value: progress)
-                        .frame(width: 130)
-                    Text("\(Int(progress * 100))%")
-                        .monospacedDigit()
-                }
-                Button(t("assignRoles")) {
-                    assignRoles()
-                }
-                .keyboardShortcut(.return)
-                .disabled(isWorking || genderWithoutVoice != nil)
-            }
+            footer
         }
         .padding(18)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             if roleSettings.isEmpty {
                 let hints: [String: VoiceGender] = roleGenderHints()
                 roleSettings = subtitle.allRoles(language).map { role in
                     RoleGenderSetting(role: role, gender: hints[role] ?? .male)
                 }
+            }
+            refreshPreview()
+        }
+        .onChange(of: voices.map { voice in voice.color }) { _, _ in
+            refreshPreview()
+        }
+        .onChange(of: voices.map { voice in voice.gender }) { _, _ in
+            refreshPreview()
+        }
+        .onChange(of: roleSettings.map { setting in setting.gender }) { _, _ in
+            refreshPreview()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t("roleAssignment"))
+                    .font(.system(size: 21, weight: .bold))
+                Text(subtitle.baseName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(t("close")) {
+                dismiss()
+            }
+        }
+    }
+
+    private var voicePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionLabel(text: t("voices"))
+                Spacer()
+                Stepper("\(t("voiceCount")): \(voiceCount)", value: $voiceCount, in: 1...12)
+                    .font(.system(size: 12))
+                    .fixedSize()
+                    .onChange(of: voiceCount) { _, newValue in
+                        adjustVoices(count: newValue)
+                    }
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                GridRow {
+                    SectionLabel(text: t("voice"))
+                    SectionLabel(text: t("highlightColor"))
+                    SectionLabel(text: t("gender"))
+                    SectionLabel(text: t("roles"))
+                }
+                ForEach($voices) { $voice in
+                    GridRow {
+                        Text("\(t("voice")) \(voice.id)")
+                            .font(.system(size: 12.5, weight: .medium))
+                        Picker("", selection: $voice.color) {
+                            ForEach(WordHighlightColor.allCases) { color in
+                                HStack {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(RoleColors.swatch(color))
+                                        .frame(width: 18, height: 18)
+                                    Text(color.title(language))
+                                }
+                                .tag(color)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 190)
+                        genderPicker($voice.gender)
+                        Text(rolesOfVoice(voice.id))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1)
+        }
+    }
+
+    private var rolePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "\(t("roles")) · \(roleSettings.count)")
+            List($roleSettings) { $setting in
+                HStack(spacing: 10) {
+                    RoleTag(role: setting.role, color: previewHighlights[setting.role])
+                        .frame(width: 190, alignment: .leading)
+                    Text("\(roleCounts[setting.role, default: 0]) \(t("lineCountSuffix"))")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 80, alignment: .trailing)
+                    Spacer(minLength: 12)
+                    genderPicker($setting.gender)
+                }
+                .listRowInsets(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10))
+            }
+            .listStyle(.plain)
+            .frame(minHeight: 240)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1)
             }
         }
     }
@@ -121,6 +206,47 @@ struct RoleAssignmentView: View {
         }
     }
 
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Text(t("roles.previewHint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if isWorking {
+                ProgressView(value: progress)
+                    .frame(width: 120)
+                Text("\(Int(progress * 100))%")
+                    .monospacedDigit()
+                    .font(.footnote)
+            }
+            Button(t("assignRoles")) {
+                assignRoles()
+            }
+            .keyboardShortcut(.return)
+            .buttonStyle(.borderedProminent)
+            .disabled(isWorking || genderWithoutVoice != nil)
+        }
+    }
+
+    /// роли, которые достанутся голосу при текущих настройках: строка в таблице голосов
+    private func rolesOfVoice(_ voiceId: Int) -> String {
+        let names: [String] = (preview?.roleToVoice ?? [:])
+            .filter { _, assigned in assigned == voiceId }
+            .keys
+            .sorted { left, right in left.localizedCaseInsensitiveCompare(right) == .orderedAscending }
+        return names.joined(separator: ", ")
+    }
+
+    /// пересчитывает предполагаемое распределение; неполные настройки просто не дают предпросмотра
+    private func refreshPreview() {
+        preview = try? RoleAssignmentService.assignRoles(
+            subtitle: subtitle,
+            voices: voices,
+            roleSettings: roleSettings,
+            language: language
+        )
+    }
+
     private func roleGenderHints() -> [String: VoiceGender] {
         subtitle.lines.reduce(into: [String: VoiceGender]()) { result, line in
             guard let gender: VoiceGender = genderHint(sex: line.sex) else {
@@ -143,55 +269,6 @@ struct RoleAssignmentView: View {
         }
     }
 
-    private var voiceTable: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(t("voices"))
-                .font(.headline)
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    Text(t("voice")).fontWeight(.semibold)
-                    Text(t("highlightColor")).fontWeight(.semibold)
-                    Text(t("gender")).fontWeight(.semibold)
-                }
-                ForEach($voices) { $voice in
-                    GridRow {
-                        Text("\(t("voice")) \(voice.id)")
-                        Picker("", selection: $voice.color) {
-                            ForEach(WordHighlightColor.allCases) { color in
-                                HStack {
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(color.previewColor)
-                                        .frame(width: 18, height: 18)
-                                    Text(color.title(language))
-                                }
-                                .tag(color)
-                            }
-                        }
-                        .frame(width: 210)
-                        genderPicker($voice.gender)
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var roleTable: some View {
-        List($roleSettings) { $setting in
-            HStack {
-                Text(setting.role)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(roleCounts[setting.role, default: 0]) \(t("lineCountSuffix"))")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 80, alignment: .trailing)
-                genderPicker($setting.gender)
-            }
-        }
-        .frame(minHeight: 240)
-    }
-
     /// общий выбор пола, используется в таблице голосов и в списке ролей
     private func genderPicker(_ selection: Binding<VoiceGender>) -> some View {
         Picker("", selection: selection) {
@@ -199,12 +276,14 @@ struct RoleAssignmentView: View {
                 Text(gender.title(language)).tag(gender)
             }
         }
-        .frame(width: 150)
+        .labelsHidden()
+        .frame(width: 140)
     }
 
     private func adjustVoices(count: Int) {
         if voices.count > count {
             voices = Array(voices.prefix(count))
+            refreshPreview()
             return
         }
 
@@ -221,6 +300,7 @@ struct RoleAssignmentView: View {
                 )
             )
         }
+        refreshPreview()
     }
 
     private func assignRoles() {
@@ -258,7 +338,7 @@ struct RoleAssignmentView: View {
                     )
                 }.value
                 isWorking = false
-                onComplete(path)
+                onComplete(path, result.roleToHighlight)
                 dismiss()
             } catch {
                 isWorking = false
@@ -282,27 +362,4 @@ struct RoleAssignmentView: View {
         }
     }
 
-}
-
-private extension WordHighlightColor {
-    var previewColor: Color {
-        switch self {
-        case .yellow:
-            return .yellow
-        case .green:
-            return .green
-        case .cyan:
-            return .cyan
-        case .magenta:
-            return .pink
-        case .blue:
-            return .blue
-        case .red:
-            return .red
-        case .darkYellow:
-            return Color(red: 0.72, green: 0.58, blue: 0.05)
-        case .lightGray:
-            return .gray
-        }
-    }
 }
