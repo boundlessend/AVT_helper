@@ -1,0 +1,277 @@
+<!--
+THESIS: у субтитров есть ось времени, и приложение обязано её показывать. Роль - это дорожка, а не строчка в списке. Отказ от компоновки «форма настроек без содержимого файла».
+OWN-WORLD: монтажная грамматика: холодный графит, линейка таймкода с делениями, дорожки, блоки реплик, тонкий плейхед. Цвет несут только блоки ролей.
+STORY: вижу, где кто говорит по всей серии -> понимаю, кого звать на смену -> включаю нужные дорожки -> выгружаю.
+FIRST VIEWPORT: линейка таймкода во всю ширину, под ней девять дорожек ролей с блоками реплик, слева заголовки дорожек, справа инспектор экспорта.
+FORM: временная раскладка, #4 из семи выведенных миров.
+-->
+<meta charset="utf-8">
+<title>AVT_helper - Таймкод</title>
+<style>
+:root {
+  --bg: #0f1116;
+  --chrome: #171a20;
+  --lane: #14171d;
+  --lane-2: #171a21;
+  --line: #262b34;
+  --line-2: #343b46;
+  --fg: #e6e9ee;
+  --fg-2: #9aa3b0;
+  --fg-3: #666f7d;
+  --sel: #3f7dff;
+  --y:#f5c93a; --g:#48c98a; --c:#3fc4de; --m:#e879bd;
+  --b:#6d95f0; --r:#e8746c; --o:#b28c2c; --gr:#7b8593;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: radial-gradient(120% 100% at 50% 0%, #2c313a 0%, #1c2028 45%, #101318 100%);
+  font: 13px/1.45 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  color: var(--fg); display: grid; place-items: center; -webkit-font-smoothing: antialiased;
+}
+.window {
+  width: 1120px; height: 748px; background: var(--bg);
+  border-radius: 11px; overflow: hidden;
+  display: grid; grid-template-rows: 44px 1fr 30px;
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,.09), 0 30px 80px -14px rgba(0,0,0,.8), 0 6px 18px rgba(0,0,0,.5);
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+.silk { font: 590 9.5px/1 -apple-system, system-ui, sans-serif; letter-spacing: .13em; text-transform: uppercase; color: var(--fg-3); }
+
+/* ---- тулбар ---- */
+.toolbar {
+  display: flex; align-items: center; gap: 14px; padding: 0 14px;
+  background: var(--chrome); border-bottom: 0.5px solid var(--line);
+}
+.lights { display: flex; gap: 8px; margin-right: 4px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; }
+.lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.file { display: flex; align-items: center; gap: 9px; }
+.file .n { font-weight: 600; font-size: 13px; }
+.file .tag { font: 600 9.5px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .07em; padding: 3.5px 5px; border-radius: 4px; background: #262b34; color: var(--fg-2); }
+.tc-big { font: 13px/1 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; color: var(--fg-2); letter-spacing: .02em; }
+.grow { flex: 1; }
+.btn {
+  height: 26px; padding: 0 11px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line-2); background: #1e222a; color: var(--fg-2);
+  font: 500 12px/1 -apple-system, system-ui, sans-serif; display: inline-flex; align-items: center; gap: 6px;
+  transition: .14s;
+}
+.btn:hover { border-color: #4a5361; color: var(--fg); }
+.btn.pri { background: var(--sel); border-color: var(--sel); color: #fff; font-weight: 600; }
+.btn.pri:hover { filter: brightness(1.1); }
+.icon { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- каркас ---- */
+.main { display: grid; grid-template-columns: 1fr 246px; min-height: 0; }
+.tl { display: grid; grid-template-columns: 178px 1fr; min-height: 0; border-right: 0.5px solid var(--line); }
+
+/* заголовки дорожек */
+.heads { border-right: 1px solid var(--line); display: grid; grid-template-rows: 34px 1fr; min-height: 0; }
+.heads .cap { display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--chrome); }
+/* дорожки делят высоту поровну: пустой хвост под последней дорожкой читался бы как обрыв данных */
+.headlist { overflow: hidden; display: grid; grid-auto-rows: 1fr; }
+.lh {
+  display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+  padding: 0 12px; border-bottom: 0.5px solid var(--line); cursor: pointer;
+  transition: background .12s;
+}
+.lh:hover { background: #1a1e25; }
+.lh.off { opacity: .45; }
+.cb { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line-2); background: #1a1e25; display: grid; place-items: center; }
+.cb.on { background: var(--sel); border-color: var(--sel); }
+.cb svg { width: 9px; height: 9px; stroke: #fff; stroke-width: 2.6; opacity: 0; }
+.cb.on svg { opacity: 1; }
+.lh .nm { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lh .nm b { font-weight: 590; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh .nm span { font: 10px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg-3); }
+.swatch { width: 3px; height: 22px; border-radius: 2px; background: var(--k); }
+
+/* линейка и дорожки */
+.grid { display: grid; grid-template-rows: 34px 1fr; min-height: 0; position: relative; overflow: hidden; }
+.ruler {
+  position: relative; background: var(--chrome); border-bottom: 1px solid var(--line);
+}
+.ruler .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.ruler .tick.minor { border-color: #1f242c; top: 60%; }
+.ruler .tick b { position: absolute; left: 6px; top: 9px; font: 10px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg-3); font-weight: 400; letter-spacing: .02em; }
+.lanes { position: relative; overflow: hidden; display: grid; grid-auto-rows: 1fr; }
+.lane { border-bottom: 0.5px solid var(--line); position: relative; background: var(--lane); }
+.lane:nth-child(even) { background: var(--lane-2); }
+.lane.off { opacity: .32; }
+.lane .grid-v { position: absolute; inset: 0; pointer-events: none; }
+.blk {
+  position: absolute; top: 24%; bottom: 24%; border-radius: 3px;
+  background: var(--k); opacity: 0;
+  animation: pop .45s cubic-bezier(.2,.85,.3,1) forwards;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(4px) scaleX(.6); } to { opacity: .95; transform: none; } }
+.playhead {
+  position: absolute; top: 0; bottom: 0; width: 1px; background: #ff5f57;
+  box-shadow: 0 0 0 0 rgba(255,95,87,0); z-index: 5; pointer-events: none;
+  animation: sweep 2.2s cubic-bezier(.4,0,.2,1) .35s both;
+}
+.playhead::before { content: ""; position: absolute; top: -34px; left: -5px; border: 5.5px solid transparent; border-top-color: #ff5f57; border-bottom: none; height: 0; }
+@keyframes sweep { from { left: 0; opacity: 1 } 92% { opacity: 1 } to { left: 100%; opacity: 0 } }
+
+/* инспектор */
+.insp { padding: 14px; display: flex; flex-direction: column; gap: 16px; overflow: auto; background: #12151a; }
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.fmt { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fmt button {
+  height: 30px; border-radius: 6px; border: 1px solid var(--line-2); background: #1a1e25;
+  color: var(--fg-3); font: 600 11.5px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .05em;
+  cursor: pointer; transition: .14s;
+}
+.fmt button:hover { border-color: #4a5361; color: var(--fg-2); }
+.fmt button.on { background: rgba(63,125,255,.16); border-color: var(--sel); color: #cfe0ff; }
+.opt label { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--fg-2); cursor: pointer; line-height: 1.35; padding: 3px 0; }
+.field {
+  border: 1px solid var(--line-2); background: #1a1e25; border-radius: 6px; padding: 7px 9px;
+  font: 11px/1.35 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg-2);
+  word-break: break-all;
+}
+.stat { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--fg-2); padding: 3px 0; }
+.stat b { font: 11.5px/1 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 500; }
+
+.statusbar { display: flex; align-items: center; gap: 12px; padding: 0 14px; background: var(--chrome); border-top: 0.5px solid var(--line); font-size: 11.5px; color: var(--fg-2); }
+</style>
+
+<svg style="display:none">
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2 6.2 4.6 8.8 10 3.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 20 20"><path d="M6.5 4.2v11.6l9-5.8z"/></symbol>
+  <symbol id="i-people" viewBox="0 0 20 20"><circle cx="7.5" cy="7" r="2.6"/><path d="M2.8 16.2c.5-2.6 2.4-4 4.7-4s4.2 1.4 4.7 4"/><path d="M13.2 6.1a2.6 2.6 0 0 1 0 5"/><path d="M14 12.6c1.7.4 2.9 1.7 3.3 3.6"/></symbol>
+</svg>
+
+<div class="window">
+  <div class="toolbar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="file"><span class="n">Ночной рейс - S01E03</span><span class="tag">SRT</span></div>
+    <span class="tc-big">00:42:18:00 · 412 реплик</span>
+    <span class="grow"></span>
+    <button class="btn"><svg class="icon"><use href="#i-people"/></svg>Разролёвка</button>
+    <button class="btn pri"><svg class="icon" style="fill:currentColor;stroke:none"><use href="#i-play"/></svg>Начать</button>
+  </div>
+
+  <div class="main">
+    <div class="tl">
+      <div class="heads">
+        <div class="cap"><span class="silk">Дорожки ролей</span></div>
+        <div class="headlist" id="heads"></div>
+      </div>
+      <div class="grid">
+        <div class="ruler" id="ruler"></div>
+        <div class="lanes" id="lanes"><div class="playhead"></div></div>
+      </div>
+    </div>
+
+    <aside class="insp">
+      <div class="sec">
+        <div class="silk">Форматы</div>
+        <div class="fmt">
+          <button class="on">SRT</button><button class="on">DOCX</button>
+          <button>ASS</button><button>VTT</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="silk">Настройки SRT</div>
+        <div class="opt">
+          <label><span class="cb on"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Полный файл с ролями в [ ]</label>
+          <label><span class="cb on"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Отдельные файлы по ролям</label>
+          <label><span class="cb"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Отдельные файлы с префиксом роли</label>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="silk">Папка выгрузки</div>
+        <div class="field">~/Desktop/Ночной рейс/выгрузка</div>
+      </div>
+
+      <div class="sec">
+        <div class="silk">К выгрузке</div>
+        <div class="stat"><span>Дорожек включено</span><b>5 / 9</b></div>
+        <div class="stat"><span>Реплик попадёт</span><b>327</b></div>
+        <div class="stat"><span>Файлов будет создано</span><b>7</b></div>
+      </div>
+
+      <div class="sec">
+        <div class="silk">После обработки</div>
+        <div class="opt">
+          <label><span class="cb on"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Открыть папку</label>
+          <label><span class="cb"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Закрыть программу</label>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="statusbar">
+    <span>Импортировано 412 реплик SRT.</span>
+    <span class="grow" style="flex:1"></span>
+    <span class="mono" style="color:var(--fg-3)">00:00:00 - 00:42:18</span>
+    <span style="font-weight:600;color:var(--fg-3)">@boundlessend</span>
+  </div>
+</div>
+
+<script>
+const DUR = 42 * 60 + 18;
+const roles = [
+  { n: "Виктор",        c: "var(--y)",  k: 128, on: 1, seed: 11, spread: [0.00, 1.00], dens: 1.0 },
+  { n: "Анна",          c: "var(--g)",  k: 96,  on: 1, seed: 23, spread: [0.02, 0.98], dens: .9 },
+  { n: "Диспетчер",     c: "var(--c)",  k: 54,  on: 1, seed: 37, spread: [0.05, 0.62], dens: .8 },
+  { n: "Пассажир",      c: "var(--m)",  k: 31,  on: 1, seed: 41, spread: [0.10, 0.55], dens: .7 },
+  { n: "Голос в эфире", c: "var(--b)",  k: 18,  on: 1, seed: 53, spread: [0.00, 0.90], dens: .6 },
+  { n: "Мария",         c: "var(--r)",  k: 14,  on: 0, seed: 67, spread: [0.55, 1.00], dens: .6 },
+  { n: "Охранник",      c: "var(--o)",  k: 9,   on: 0, seed: 71, spread: [0.28, 0.46], dens: .5 },
+  { n: "Толпа",         c: "var(--gr)", k: 6,   on: 0, seed: 83, spread: [0.70, 0.86], dens: .5 },
+  { n: "Не назначено",  c: "#4a5361",   k: 56,  on: 0, seed: 97, spread: [0.00, 1.00], dens: 1.0 },
+];
+
+// детерминированный генератор: макет должен выглядеть одинаково при каждом открытии
+function lcg(seed) { let s = seed; return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; }
+
+const ruler = document.getElementById("ruler");
+for (let m = 0; m <= 40; m += 5) {
+  const t = document.createElement("div");
+  t.className = "tick";
+  const pos = m * 60 / DUR * 100;
+  t.style.left = pos + "%";
+  // у правого края подпись не помещается и налезает на соседнюю, поэтому деление остаётся без неё
+  if (pos <= 90) {
+    t.innerHTML = "<b>" + String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0") + ":00</b>";
+  }
+  ruler.appendChild(t);
+}
+for (let m = 1; m <= 42; m++) {
+  if (m % 5 === 0) continue;
+  const t = document.createElement("div");
+  t.className = "tick minor";
+  t.style.left = (m * 60 / DUR * 100) + "%";
+  ruler.appendChild(t);
+}
+
+const heads = document.getElementById("heads"), lanes = document.getElementById("lanes");
+roles.forEach((r, i) => {
+  const h = document.createElement("div");
+  h.className = "lh" + (r.on ? "" : " off");
+  h.style.setProperty("--k", r.c);
+  h.innerHTML = `<span class="cb${r.on ? " on" : ""}"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>
+    <span class="nm"><b>${r.n}</b><span>${r.k} репл.</span></span><span class="swatch"></span>`;
+  heads.appendChild(h);
+
+  const lane = document.createElement("div");
+  lane.className = "lane" + (r.on ? "" : " off");
+  const rnd = lcg(r.seed);
+  const [a, b] = r.spread;
+  const blocks = Math.min(r.k, Math.round(r.k * r.dens * 0.55) + 6);
+  for (let j = 0; j < blocks; j++) {
+    const pos = a + (b - a) * (j / blocks + rnd() * 0.06);
+    const w = 0.35 + rnd() * 1.6;
+    const el = document.createElement("div");
+    el.className = "blk";
+    el.style.cssText = `--k:${r.c};left:${(pos * 100).toFixed(2)}%;width:${w.toFixed(2)}%;animation-delay:${(i * 0.05 + j * 0.006).toFixed(3)}s`;
+    lane.appendChild(el);
+  }
+  lanes.appendChild(lane);
+});
+</script>

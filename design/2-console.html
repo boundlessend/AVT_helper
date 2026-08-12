@@ -1,0 +1,306 @@
+<!--
+THESIS: главный объект приложения - не формат файла, а роль. Роли выстроены как каналы пульта, экспорт - как секция мастера. Отказ от «список ролей внизу мелким шрифтом».
+OWN-WORLD: тёмный графит студии, шелкография заглавными, тонкие линейки, шкалы с делениями; цвет только у роли и только тот, которым её выделят в Word.
+STORY: вижу, кто несёт спектакль -> назначаю пол и участие прямо на канале -> жму пуск в секции мастера.
+FIRST VIEWPORT: сверху источник и мастер-секция с форматами и пуском, всю нижнюю часть занимают каналы ролей со шкалами реплик.
+FORM: канальная раскладка, #3 из семи выведенных миров.
+-->
+<meta charset="utf-8">
+<title>AVT_helper - Пульт</title>
+<style>
+:root {
+  --bg: #0d0e10;
+  --panel: #17191d;
+  --strip: #1c1f24;
+  --strip-2: #212429;
+  --line: #2b3038;
+  --line-2: #383e47;
+  --fg: #e9ebee;
+  --fg-2: #99a1ac;
+  --fg-3: #6b7480;
+  --y: #ffd93d; --g: #4ade80; --c: #4fd8ee; --m: #ff86cf;
+  --b: #7aa2ff; --r: #ff7a70; --o: #c9a227; --gr: #98a2ae;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: radial-gradient(120% 100% at 50% 0%, #34383e 0%, #202327 45%, #131518 100%);
+  font: 13px/1.45 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  color: var(--fg);
+  display: grid; place-items: center;
+  -webkit-font-smoothing: antialiased;
+}
+.window {
+  width: 1120px; height: 748px;
+  background: var(--bg);
+  border-radius: 11px; overflow: hidden;
+  display: grid; grid-template-rows: 42px auto 1fr 32px;
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,.09), 0 30px 80px -14px rgba(0,0,0,.8), 0 6px 18px rgba(0,0,0,.5);
+}
+.titlebar {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding: 0 14px; background: #1a1c20; border-bottom: 0.5px solid var(--line);
+}
+.lights { display: flex; gap: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; }
+.lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.title { font-weight: 590; font-size: 13px; color: var(--fg-2); }
+.silk { font: 590 9.5px/1 -apple-system, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3); }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+/* ---- верхняя секция ---- */
+.head {
+  display: grid; grid-template-columns: 1fr 300px 190px;
+  gap: 1px; background: var(--line); border-bottom: 1px solid var(--line);
+}
+.cell { background: var(--panel); padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+.file { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.file .n { font-size: 19px; font-weight: 620; letter-spacing: -.01em; }
+.file .tag {
+  font: 600 10px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .08em;
+  padding: 4px 6px; border-radius: 4px; background: #2b3038; color: var(--fg-2);
+}
+.readout { display: flex; gap: 22px; }
+.readout div { display: flex; flex-direction: column; gap: 3px; }
+.readout .v { font: 15px/1 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.readout .v.dim { color: var(--fg-3); }
+
+.fmtgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.fmtbtn {
+  height: 44px; border-radius: 6px; border: 1px solid var(--line-2);
+  background: linear-gradient(180deg, #23272d, #1b1e23);
+  color: var(--fg-3); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .06em;
+  transition: all .16s cubic-bezier(.2,.8,.3,1);
+}
+.fmtbtn .led { width: 16px; height: 3px; border-radius: 2px; background: #333a43; transition: background .16s, box-shadow .16s; }
+.fmtbtn:hover { border-color: #4b535e; color: var(--fg-2); }
+.fmtbtn.on { color: var(--fg); background: linear-gradient(180deg, #2c313a, #22262c); border-color: #59626e; }
+.fmtbtn.on .led { background: #6fe08a; box-shadow: 0 0 6px rgba(111,224,138,.55); }
+
+.masterbtn {
+  height: 44px; width: 100%; border: none; border-radius: 6px; cursor: pointer;
+  background: linear-gradient(180deg, #f2f3f5, #d7dade);
+  color: #14161a; font: 650 13px/1 -apple-system, system-ui, sans-serif; letter-spacing: .01em;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 2px 6px rgba(0,0,0,.4);
+  transition: transform .1s ease, filter .14s;
+}
+.masterbtn:hover { filter: brightness(1.06); }
+.masterbtn:active { transform: translateY(1px); }
+.subbtn {
+  height: 28px; width: 100%; border: 1px solid var(--line-2); border-radius: 6px;
+  background: #1e2126; color: var(--fg-2); font: 500 12px/1 -apple-system, system-ui, sans-serif; cursor: pointer;
+  transition: all .14s;
+}
+.subbtn:hover { border-color: #59626e; color: var(--fg); }
+
+/* ---- каналы ---- */
+.deck { display: grid; grid-template-rows: auto 1fr; min-height: 0; background: var(--bg); }
+.deckhead { display: flex; align-items: center; gap: 12px; padding: 11px 18px 9px; }
+.strips { display: flex; gap: 1px; padding: 0 18px 16px; overflow-x: auto; min-height: 0; }
+.strip {
+  flex: none; width: 104px;
+  background: linear-gradient(180deg, #23262c, var(--strip) 42%);
+  border: 1px solid #333944;
+  border-radius: 8px;
+  margin-right: 7px;
+  display: grid; grid-template-rows: auto auto 1fr auto auto;
+  overflow: hidden;
+  transition: border-color .15s, background .15s;
+}
+.strip:hover { border-color: var(--line-2); background: var(--strip-2); }
+.strip.off { opacity: .42; }
+.striptop { padding: 9px 9px 7px; display: flex; flex-direction: column; gap: 7px; border-bottom: 1px solid var(--line); }
+.led2 { width: 100%; height: 4px; border-radius: 2px; background: var(--k); }
+.sname { font: 600 11.5px/1.25 -apple-system, system-ui, sans-serif; letter-spacing: .01em; min-height: 28px; word-break: break-word; }
+.snum { padding: 7px 9px 4px; display: flex; align-items: baseline; justify-content: space-between; }
+.snum .big { font: 17px/1 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.snum .pct { font: 10px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg-3); }
+
+.meter { position: relative; margin: 8px 9px 6px; }
+.track {
+  position: relative; height: 100%; min-height: 120px; border-radius: 4px; overflow: hidden;
+  background: #101216;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.6);
+}
+/* деления шкалы: те же четверти, что читает глаз на измерителе */
+.track::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0 calc(25% - 1px), rgba(255,255,255,.07) calc(25% - 1px) 25%);
+}
+.fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--k); border-radius: 4px 4px 3px 3px;
+  height: var(--h);
+  transform-origin: bottom;
+  animation: rise .75s cubic-bezier(.16,.9,.28,1) both;
+  animation-delay: var(--d);
+}
+@keyframes rise { from { transform: scaleY(0); } }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; margin: 0 9px 8px; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+.seg button { height: 22px; border: none; background: transparent; color: var(--fg-3); font: 500 10.5px/1 -apple-system, system-ui, sans-serif; cursor: pointer; transition: .14s; }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button.on { background: #333a44; color: var(--fg); }
+.seg button:hover:not(.on) { color: var(--fg-2); }
+
+.incl {
+  margin: 0 9px 9px; height: 26px; border-radius: 5px; cursor: pointer;
+  border: 1px solid var(--line-2); background: #191c21; color: var(--fg-3);
+  font: 600 10px/1 -apple-system, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase;
+  display: grid; place-items: center; transition: .15s;
+}
+.incl.on { background: var(--k); border-color: var(--k); color: #101215; }
+
+/* ---- низ ---- */
+.statusbar {
+  display: flex; align-items: center; gap: 14px; padding: 0 16px;
+  background: #16181c; border-top: 0.5px solid var(--line); font-size: 11.5px; color: var(--fg-2);
+}
+.statusbar .grow { flex: 1; }
+.dotled { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; }
+</style>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="title">AVT_helper</div>
+    <div></div>
+  </div>
+
+  <!-- верх -->
+  <div class="head">
+    <div class="cell">
+      <div class="silk">Источник</div>
+      <div class="file">
+        <span class="n">Ночной рейс - S01E03</span>
+        <span class="tag">SRT · UTF-8</span>
+      </div>
+      <div class="readout">
+        <div><span class="silk">Реплик</span><span class="v">412</span></div>
+        <div><span class="silk">Ролей</span><span class="v">9</span></div>
+        <div><span class="silk">Хронометраж</span><span class="v">00:42:18</span></div>
+        <div><span class="silk">Выгрузка</span><span class="v dim" style="font-size:12px">~/Desktop/Ночной рейс</span></div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <div class="silk">Форматы экспорта</div>
+      <div class="fmtgrid">
+        <button class="fmtbtn on"><span class="led"></span>SRT</button>
+        <button class="fmtbtn on"><span class="led"></span>DOCX</button>
+        <button class="fmtbtn"><span class="led"></span>ASS</button>
+        <button class="fmtbtn"><span class="led"></span>VTT</button>
+      </div>
+      <div style="display:flex;gap:14px">
+        <label class="silk" style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--fg-2)">
+          <span style="width:22px;height:13px;border-radius:7px;background:#4ade80;position:relative;display:inline-block">
+            <span style="position:absolute;top:1.5px;right:1.5px;width:10px;height:10px;border-radius:50%;background:#0d0e10"></span>
+          </span>Отдельные файлы по ролям
+        </label>
+      </div>
+    </div>
+
+    <div class="cell">
+      <div class="silk">Мастер</div>
+      <button class="masterbtn">Начать</button>
+      <button class="subbtn">Разролёвка</button>
+    </div>
+  </div>
+
+  <!-- каналы -->
+  <div class="deck">
+    <div class="deckhead">
+      <span class="silk">Каналы ролей</span>
+      <span class="silk" style="color:var(--fg-2)">9</span>
+      <span style="flex:1"></span>
+      <button class="subbtn" style="width:auto;padding:0 12px;height:24px;font-size:11px">Все</button>
+      <button class="subbtn" style="width:auto;padding:0 12px;height:24px;font-size:11px">Никого</button>
+    </div>
+
+    <div class="strips">
+      <div class="strip" style="--k:var(--y)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Виктор</span></div>
+        <div class="snum"><span class="big">128</span><span class="pct">31%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:100%;--d:.05s"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl on">В экспорт</div>
+      </div>
+
+      <div class="strip" style="--k:var(--g)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Анна</span></div>
+        <div class="snum"><span class="big">96</span><span class="pct">23%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:75%;--d:.1s"></div></div></div>
+        <div class="seg"><button>Муж</button><button class="on">Жен</button></div>
+        <div class="incl on">В экспорт</div>
+      </div>
+
+      <div class="strip" style="--k:var(--c)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Диспетчер</span></div>
+        <div class="snum"><span class="big">54</span><span class="pct">13%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:42%;--d:.15s"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl on">В экспорт</div>
+      </div>
+
+      <div class="strip" style="--k:var(--m)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Пассажир</span></div>
+        <div class="snum"><span class="big">31</span><span class="pct">8%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:24%;--d:.2s"></div></div></div>
+        <div class="seg"><button>Муж</button><button class="on">Жен</button></div>
+        <div class="incl on">В экспорт</div>
+      </div>
+
+      <div class="strip" style="--k:var(--b)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Голос в эфире</span></div>
+        <div class="snum"><span class="big">18</span><span class="pct">4%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:14%;--d:.25s"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl on">В экспорт</div>
+      </div>
+
+      <div class="strip off" style="--k:var(--r)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Мария</span></div>
+        <div class="snum"><span class="big">14</span><span class="pct">3%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:11%;--d:.3s"></div></div></div>
+        <div class="seg"><button>Муж</button><button class="on">Жен</button></div>
+        <div class="incl">Выкл</div>
+      </div>
+
+      <div class="strip off" style="--k:var(--o)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Охранник</span></div>
+        <div class="snum"><span class="big">9</span><span class="pct">2%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:7%;--d:.35s"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl">Выкл</div>
+      </div>
+
+      <div class="strip off" style="--k:var(--gr)">
+        <div class="striptop"><span class="led2"></span><span class="sname">Толпа</span></div>
+        <div class="snum"><span class="big">6</span><span class="pct">1%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:5%;--d:.4s"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl">Выкл</div>
+      </div>
+
+      <div class="strip off" style="--k:#4a525d">
+        <div class="striptop"><span class="led2" style="background:repeating-linear-gradient(90deg,#4a525d 0 4px,transparent 4px 8px)"></span><span class="sname" style="color:var(--fg-3)">Не назначено</span></div>
+        <div class="snum"><span class="big" style="color:var(--fg-3)">56</span><span class="pct">14%</span></div>
+        <div class="meter"><div class="track"><div class="fill" style="--h:44%;--d:.45s;opacity:.5"></div></div></div>
+        <div class="seg"><button class="on">Муж</button><button>Жен</button></div>
+        <div class="incl">Выкл</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span class="dotled"></span>
+    <span>Импортировано 412 реплик SRT.</span>
+    <span class="grow"></span>
+    <span class="mono" style="color:var(--fg-3)">5 из 9 ролей в экспорте</span>
+    <span style="font-weight:600;color:var(--fg-3)">@boundlessend</span>
+  </div>
+</div>

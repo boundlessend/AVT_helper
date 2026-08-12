@@ -1,0 +1,414 @@
+<!--
+THESIS: приложение показывает сам монтажный лист, а не форму настроек. Отказ от компоновки «три коробки чекбоксов + кнопка».
+OWN-WORLD: холодная бумага, чёрная краска, волосяные линейки, и единственный цвет - настоящая палитра маркеров Word, которой приложение и разролёвывает.
+STORY: вижу свой файл как лист озвучки -> понимаю, кто и сколько говорит -> отмечаю роли прямо на листе -> выгружаю.
+FIRST VIEWPORT: слева узкий рельс источника и форматов, по центру лист с таймкодами и подсвеченными ролями во всю высоту, справа роли с долями. Кнопка «Начать» внизу справа.
+FORM: документ-центричная раскладка, #1 из семи выведенных миров.
+-->
+<meta charset="utf-8">
+<title>AVT_helper - Монтажный лист</title>
+<style>
+:root {
+  --paper: #f5f5f2;
+  --sheet: #ffffff;
+  --ink: #15171a;
+  --ink-2: #5c6068;
+  --ink-3: #8b8f96;
+  --rule: #e0e0dc;
+  --rule-strong: #c9c9c4;
+  --field: #ffffff;
+  --mark-yellow: #ffe14d;
+  --mark-green: #93e8a4;
+  --mark-cyan: #79e2f2;
+  --mark-magenta: #ffa8dd;
+  --mark-blue: #a8c0ff;
+  --mark-red: #ff9f97;
+  --mark-olive: #d7c26a;
+  --mark-gray: #d2d4d6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(120% 90% at 50% 0%, #d9dad6 0%, #b9bcb8 60%, #a4a8a4 100%);
+  font: 13px/1.45 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  -webkit-font-smoothing: antialiased;
+}
+.window {
+  width: 1120px;
+  height: 748px;
+  background: var(--paper);
+  border-radius: 11px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 44px 1fr 34px;
+  box-shadow:
+    0 0 0 0.5px rgba(0,0,0,.28),
+    0 28px 70px -12px rgba(0,0,0,.45),
+    0 4px 12px rgba(0,0,0,.15);
+}
+
+/* ---- титульная полоса ---- */
+.titlebar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 14px;
+  background: #ededea;
+  border-bottom: 0.5px solid var(--rule-strong);
+}
+.lights { display: flex; gap: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.lights i:nth-child(1) { background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
+.lights i:nth-child(2) { background: #febc2e; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
+.lights i:nth-child(3) { background: #28c840; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.12); }
+.doctitle { display: flex; align-items: center; gap: 7px; font-weight: 590; font-size: 13px; }
+.doctitle .badge {
+  font: 500 10px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: .06em;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: #fff;
+}
+.tb-right { justify-self: end; display: flex; gap: 6px; }
+
+/* ---- общие мелочи ---- */
+.icon { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 10px;
+  border: 0.5px solid var(--rule-strong);
+  border-radius: 6px;
+  background: linear-gradient(#fff, #f7f7f5);
+  color: var(--ink);
+  font: 500 12px/1 -apple-system, system-ui, sans-serif;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.ghost:hover { background: #fff; border-color: #a9a9a3; }
+.label {
+  font: 590 10px/1 -apple-system, system-ui, sans-serif;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.body { display: grid; grid-template-columns: 232px 1fr 268px; min-height: 0; }
+
+/* ---- левый рельс ---- */
+.rail {
+  border-right: 0.5px solid var(--rule);
+  padding: 16px 14px;
+  display: flex; flex-direction: column; gap: 18px;
+  min-height: 0; overflow: auto;
+}
+.group { display: flex; flex-direction: column; gap: 8px; }
+.source {
+  border: 0.5px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--field);
+  padding: 10px 11px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.source .name { font-weight: 590; font-size: 12.5px; line-height: 1.3; word-break: break-word; }
+.source .meta { font: 11px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink-2); }
+.path {
+  border: 0.5px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--field);
+  padding: 6px 8px;
+  font: 11px/1.35 ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--ink-2);
+  display: flex; align-items: flex-start; gap: 6px;
+}
+.path svg { flex: none; width: 13px; height: 13px; margin-top: 1px; }
+.path span { word-break: break-all; }
+
+.fmt { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fmt button {
+  height: 34px;
+  border: 0.5px solid var(--rule-strong);
+  border-radius: 7px;
+  background: var(--field);
+  font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: .04em;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all .14s cubic-bezier(.2,.8,.3,1);
+}
+.fmt button:hover { border-color: #9a9a94; color: var(--ink); }
+.fmt button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.fmt button .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .0; transition: opacity .14s; }
+.fmt button.on .dot { opacity: 1; }
+
+.opt { display: flex; flex-direction: column; gap: 7px; }
+.opt label { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--ink-2); cursor: pointer; line-height: 1.35; }
+.box {
+  flex: none; width: 14px; height: 14px; margin-top: 1px;
+  border: 1px solid var(--rule-strong); border-radius: 4px; background: #fff;
+  display: grid; place-items: center;
+}
+.box svg { width: 10px; height: 10px; stroke: #fff; stroke-width: 2.4; opacity: 0; }
+label.on .box { background: var(--ink); border-color: var(--ink); }
+label.on .box svg { opacity: 1; }
+label.on { color: var(--ink); }
+
+/* ---- лист ---- */
+.sheetwrap { background: var(--sheet); min-height: 0; display: grid; grid-template-rows: auto 1fr; }
+.sheethead {
+  display: grid; grid-template-columns: 88px 156px 1fr;
+  gap: 14px; align-items: end;
+  padding: 13px 22px 9px;
+  border-bottom: 1px solid var(--ink);
+}
+.sheet { overflow: auto; padding: 2px 22px 20px; }
+.row {
+  display: grid; grid-template-columns: 88px 156px 1fr;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 0.5px solid var(--rule);
+  align-items: baseline;
+}
+.row:hover { background: #fbfbf9; }
+.tc {
+  font: 11px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.role {
+  font: 590 11.5px/1.5 -apple-system, system-ui, sans-serif;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 0;
+  width: fit-content;
+  padding: 1px 4px;
+  margin-left: -4px;
+}
+.role::before {
+  content: ""; position: absolute; inset: 0;
+  background: var(--mk, transparent);
+  border-radius: 2px;
+  z-index: -1;
+  transform-origin: left center;
+  animation: swipe .5s cubic-bezier(.2,.85,.3,1) both;
+  animation-delay: var(--d, 0s);
+}
+@keyframes swipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.line { font-size: 13px; line-height: 1.5; color: var(--ink); }
+.line.mute { color: var(--ink-3); font-style: italic; }
+
+/* ---- правая колонка ролей ---- */
+.roles {
+  border-left: 0.5px solid var(--rule);
+  padding: 16px 14px 10px;
+  display: grid; grid-template-rows: auto 1fr auto; gap: 10px; min-height: 0;
+}
+.roleshead { display: flex; align-items: center; justify-content: space-between; }
+.rolelist { overflow: auto; display: flex; flex-direction: column; }
+.rolerow {
+  display: grid; grid-template-columns: 14px 1fr auto; gap: 9px; align-items: center;
+  padding: 7px 4px; border-radius: 6px; cursor: pointer;
+}
+.rolerow:hover { background: #ededea; }
+.rolerow .nm { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.chip { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.rolerow .txt { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rolerow .n { font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.share { grid-column: 2 / -1; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; margin-top: 5px; }
+.share i { display: block; height: 100%; background: var(--mk); border-radius: 2px; animation: grow .7s cubic-bezier(.2,.85,.3,1) both; animation-delay: var(--d); }
+@keyframes grow { from { width: 0 !important; } }
+.hint { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
+
+/* ---- нижняя полоса ---- */
+.statusbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 14px;
+  background: #ededea;
+  border-top: 0.5px solid var(--rule-strong);
+  font-size: 11.5px; color: var(--ink-2);
+}
+.statusbar .grow { flex: 1; }
+.primary {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 24px; padding: 0 13px; border: none; border-radius: 6px;
+  background: var(--ink); color: #fff;
+  font: 600 12px/1 -apple-system, system-ui, sans-serif; cursor: pointer;
+  transition: transform .1s ease, opacity .12s;
+}
+.primary:hover { opacity: .88; }
+.primary:active { transform: scale(.98); }
+.sign { font-weight: 600; color: var(--ink-3); }
+</style>
+
+<svg style="display:none">
+  <symbol id="i-folder" viewBox="0 0 20 20"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.6l1.5 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2 6.2 4.6 8.8 10 3.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 20 20"><path d="M6.5 4.2v11.6l9-5.8z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 20 20"><path d="M5 2.5h6.5L16 7v10.5H5z"/><path d="M11.5 2.5V7H16"/></symbol>
+  <symbol id="i-people" viewBox="0 0 20 20"><circle cx="7.5" cy="7" r="2.6"/><path d="M2.8 16.2c.5-2.6 2.4-4 4.7-4s4.2 1.4 4.7 4"/><path d="M13.2 6.1a2.6 2.6 0 0 1 0 5"/><path d="M14 12.6c1.7.4 2.9 1.7 3.3 3.6"/></symbol>
+</svg>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="doctitle"><span class="badge">SRT</span>Ночной рейс - S01E03.srt</div>
+    <div class="tb-right">
+      <button class="ghost"><svg class="icon"><use href="#i-people"/></svg>Разролёвка</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- левый рельс -->
+    <aside class="rail">
+      <div class="group">
+        <div class="label">Источник</div>
+        <div class="source">
+          <div class="name">Ночной рейс - S01E03.srt</div>
+          <div class="meta">412 реплик · 9 ролей · 00:42:18</div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Папка выгрузки</div>
+        <div class="path"><svg class="icon"><use href="#i-folder"/></svg><span>~/Desktop/Ночной рейс/выгрузка</span></div>
+      </div>
+
+      <div class="group">
+        <div class="label">Форматы</div>
+        <div class="fmt">
+          <button class="on"><span class="dot"></span>SRT</button>
+          <button class="on"><span class="dot"></span>DOCX</button>
+          <button><span class="dot"></span>ASS</button>
+          <button><span class="dot"></span>VTT</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">SRT</div>
+        <div class="opt">
+          <label class="on"><span class="box"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Полный файл с ролями в [ ]</label>
+          <label class="on"><span class="box"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Отдельные файлы по ролям</label>
+          <label><span class="box"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Отдельные файлы с префиксом роли</label>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">После обработки</div>
+        <div class="opt">
+          <label class="on"><span class="box"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Открыть папку</label>
+          <label><span class="box"><svg viewBox="0 0 12 12" fill="none"><use href="#i-check"/></svg></span>Закрыть программу</label>
+        </div>
+      </div>
+    </aside>
+
+    <!-- лист -->
+    <main class="sheetwrap">
+      <div class="sheethead">
+        <div class="label">Тайминг</div>
+        <div class="label">Роль</div>
+        <div class="label">Реплика</div>
+      </div>
+      <div class="sheet">
+        <div class="row"><div class="tc">00:04:12,180</div><div class="role" style="--mk:var(--mark-yellow);--d:.05s">Виктор</div><div class="line">Мы взлетаем через семь минут. Пристегнись.</div></div>
+        <div class="row"><div class="tc">00:04:15,940</div><div class="role" style="--mk:var(--mark-green);--d:.09s">Анна</div><div class="line">Ты обещал, что в этот раз всё будет по-другому.</div></div>
+        <div class="row"><div class="tc">00:04:19,000</div><div class="role" style="--mk:var(--mark-cyan);--d:.13s">Диспетчер</div><div class="line">Борт четыре-два-ноль, полоса свободна.</div></div>
+        <div class="row"><div class="tc">00:04:22,610</div><div class="role" style="--mk:var(--mark-yellow);--d:.17s">Виктор</div><div class="line">Слышу вас. Идём на разгон.</div></div>
+        <div class="row"><div class="tc">00:04:26,300</div><div class="role" style="--mk:var(--mark-magenta);--d:.21s">Пассажир</div><div class="line">Простите, здесь занято?</div></div>
+        <div class="row"><div class="tc">00:04:28,880</div><div class="role" style="--mk:var(--mark-green);--d:.25s">Анна</div><div class="line">Уже нет.</div></div>
+        <div class="row"><div class="tc">00:04:31,450</div><div class="role" style="--mk:var(--mark-blue);--d:.29s">Голос в эфире</div><div class="line">...повторяю, все рейсы восточного направления задержаны до утра.</div></div>
+        <div class="row"><div class="tc">00:04:36,020</div><div class="role" style="--mk:var(--mark-yellow);--d:.33s">Виктор</div><div class="line">Не смотри вниз. Просто дыши.</div></div>
+        <div class="row"><div class="tc">00:04:39,700</div><div class="role" style="--mk:var(--mark-red);--d:.37s">Мария</div><div class="line">Я говорила ему не лететь сегодня.</div></div>
+        <div class="row"><div class="tc">00:04:43,120</div><div class="role" style="--mk:var(--mark-cyan);--d:.41s">Диспетчер</div><div class="line">Четыре-два-ноль, снижайтесь до трёх тысяч.</div></div>
+        <div class="row"><div class="tc">00:04:47,560</div><div class="role" style="--mk:var(--mark-olive);--d:.45s">Охранник</div><div class="line">Сюда нельзя. Отойдите от ограждения.</div></div>
+        <div class="row"><div class="tc">00:04:51,010</div><div class="role" style="--mk:var(--mark-gray);--d:.49s">Толпа</div><div class="line">(гул, неразборчивые голоса)</div></div>
+        <div class="row"><div class="tc">00:04:54,400</div><div class="role" style="--mk:var(--mark-green);--d:.53s">Анна</div><div class="line">Если мы сядем, я больше никогда не сяду в самолёт.</div></div>
+        <div class="row"><div class="tc">00:04:58,880</div><div class="role" style="--mk:var(--mark-yellow);--d:.57s">Виктор</div><div class="line">Договорились.</div></div>
+        <div class="row"><div class="tc">00:05:02,300</div><div class="role" style="--mk:transparent;--d:.61s;color:var(--ink-3)">Не назначено</div><div class="line mute">Надпись на табло: «РЕЙС ОТМЕНЁН»</div></div>
+        <div class="row"><div class="tc">00:05:06,740</div><div class="role" style="--mk:var(--mark-blue);--d:.65s">Голос в эфире</div><div class="line">Пассажиров рейса четыре-два-ноль просят подойти к стойке.</div></div>
+      </div>
+    </main>
+
+    <!-- роли -->
+    <aside class="roles">
+      <div class="roleshead">
+        <div class="label">Роли · 9</div>
+        <div style="display:flex;gap:4px">
+          <button class="ghost" style="height:22px;padding:0 8px;font-size:11px">Все</button>
+          <button class="ghost" style="height:22px;padding:0 8px;font-size:11px">Никого</button>
+        </div>
+      </div>
+
+      <div class="rolelist">
+        <div class="rolerow" style="--mk:var(--mark-yellow);--d:.1s">
+          <span class="box on" style="background:var(--ink);border-color:var(--ink);display:grid;place-items:center"><svg viewBox="0 0 12 12" fill="none" style="width:10px;height:10px;stroke:#fff;stroke-width:2.4;opacity:1"><use href="#i-check"/></svg></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-yellow)"></span><span class="txt">Виктор</span></span>
+          <span class="n">128</span>
+          <span class="share"><i style="width:31%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-green);--d:.16s">
+          <span class="box on" style="background:var(--ink);border-color:var(--ink);display:grid;place-items:center"><svg viewBox="0 0 12 12" fill="none" style="width:10px;height:10px;stroke:#fff;stroke-width:2.4;opacity:1"><use href="#i-check"/></svg></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-green)"></span><span class="txt">Анна</span></span>
+          <span class="n">96</span>
+          <span class="share"><i style="width:23%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-cyan);--d:.22s">
+          <span class="box on" style="background:var(--ink);border-color:var(--ink);display:grid;place-items:center"><svg viewBox="0 0 12 12" fill="none" style="width:10px;height:10px;stroke:#fff;stroke-width:2.4;opacity:1"><use href="#i-check"/></svg></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-cyan)"></span><span class="txt">Диспетчер</span></span>
+          <span class="n">54</span>
+          <span class="share"><i style="width:13%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-magenta);--d:.28s">
+          <span class="box on" style="background:var(--ink);border-color:var(--ink);display:grid;place-items:center"><svg viewBox="0 0 12 12" fill="none" style="width:10px;height:10px;stroke:#fff;stroke-width:2.4;opacity:1"><use href="#i-check"/></svg></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-magenta)"></span><span class="txt">Пассажир</span></span>
+          <span class="n">31</span>
+          <span class="share"><i style="width:8%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-blue);--d:.34s">
+          <span class="box on" style="background:var(--ink);border-color:var(--ink);display:grid;place-items:center"><svg viewBox="0 0 12 12" fill="none" style="width:10px;height:10px;stroke:#fff;stroke-width:2.4;opacity:1"><use href="#i-check"/></svg></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-blue)"></span><span class="txt">Голос в эфире</span></span>
+          <span class="n">18</span>
+          <span class="share"><i style="width:5%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-red);--d:.4s">
+          <span class="box"></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-red)"></span><span class="txt">Мария</span></span>
+          <span class="n">14</span>
+          <span class="share"><i style="width:4%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-olive);--d:.46s">
+          <span class="box"></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-olive)"></span><span class="txt">Охранник</span></span>
+          <span class="n">9</span>
+          <span class="share"><i style="width:3%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--mark-gray);--d:.52s">
+          <span class="box"></span>
+          <span class="nm"><span class="chip" style="background:var(--mark-gray)"></span><span class="txt">Толпа</span></span>
+          <span class="n">6</span>
+          <span class="share"><i style="width:2%"></i></span>
+        </div>
+        <div class="rolerow" style="--mk:var(--rule-strong);--d:.58s">
+          <span class="box"></span>
+          <span class="nm"><span class="chip" style="background:transparent;border:1px dashed var(--rule-strong)"></span><span class="txt" style="color:var(--ink-3)">Не назначено</span></span>
+          <span class="n">56</span>
+          <span class="share"><i style="width:14%"></i></span>
+        </div>
+      </div>
+
+      <p class="hint">Отмеченные роли попадут в отдельные файлы SRT. Цвет здесь тот же, каким роль будет выделена в DOCX.</p>
+    </aside>
+  </div>
+
+  <div class="statusbar">
+    <span>Импортировано 412 реплик SRT.</span>
+    <span class="grow"></span>
+    <button class="primary"><svg class="icon" style="width:13px;height:13px;fill:currentColor;stroke:none"><use href="#i-play"/></svg>Начать</button>
+    <span class="sign">@boundlessend</span>
+  </div>
+</div>
