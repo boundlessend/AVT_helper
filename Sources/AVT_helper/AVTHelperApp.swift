@@ -171,19 +171,8 @@ final class ProcessingModel: ObservableObject {
 struct ContentView: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
     @StateObject private var model: ProcessingModel = ProcessingModel()
-    @AppStorage("outputFolder") private var outputFolder: String =
-        FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
-        ?? NSHomeDirectory()
+    @StateObject private var options: ExportOptions = ExportOptions()
     @State private var selectedRoles: Set<String> = []
-    @AppStorage("exportAss") private var exportAss: Bool = false
-    @AppStorage("exportSrt") private var exportSrt: Bool = true
-    @AppStorage("exportVtt") private var exportVtt: Bool = false
-    @AppStorage("exportDocx") private var exportDocx: Bool = false
-    @AppStorage("srtFullWithRoles") private var srtFullWithRoles: Bool = false
-    @AppStorage("srtSeparateFiles") private var srtSeparateFiles: Bool = false
-    @AppStorage("srtSeparateWithRoles") private var srtSeparateWithRoles: Bool = false
-    @AppStorage("openFolderAfterProcessing") private var openFolderAfterProcessing: Bool = false
-    @AppStorage("closeProgramAfterProcessing") private var closeProgramAfterProcessing: Bool = false
     @AppStorage(RecentFiles.storageKey) private var recentFilesRaw: String = ""
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
@@ -199,7 +188,7 @@ struct ContentView: View {
     }
 
     private var outputFolderExists: Bool {
-        OutputFolder.isUsable(outputFolder)
+        OutputFolder.isUsable(options.outputFolder)
     }
 
     /// причина, по которой запуск невозможен; nil означает, что всё готово
@@ -207,7 +196,7 @@ struct ContentView: View {
         if model.importedSubtitle == nil {
             return t("hint.selectInput")
         }
-        if !exportAss && !exportSrt && !exportVtt && !exportDocx {
+        if !options.hasFormat {
             return t("hint.selectFormat")
         }
         if !outputFolderExists {
@@ -230,7 +219,14 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                rail
+                ExportRailView(
+                    options: options,
+                    language: language,
+                    subtitle: model.importedSubtitle,
+                    onChooseInput: chooseInputFile,
+                    onChooseOutputFolder: chooseOutputFolder
+                )
+                .disabled(model.isWorking)
                 Divider()
                 sheetColumn
                 Divider()
@@ -261,12 +257,6 @@ struct ContentView: View {
         }
         .navigationTitle(model.importedSubtitle?.baseName ?? "AVT_helper")
         .navigationSubtitle(windowSubtitle)
-        .onAppear {
-            // до вложенности префикс роли включался сам по себе: сохраняем прежний результат такой настройки
-            if srtSeparateWithRoles && !srtSeparateFiles {
-                srtSeparateFiles = true
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { notification in
             if model.isWorking {
                 return
@@ -293,7 +283,7 @@ struct ContentView: View {
                 RoleAssignmentView(
                     subtitle: subtitle,
                     digest: model.digest,
-                    outputFolder: outputFolder,
+                    outputFolder: options.outputFolder,
                     language: language,
                     onComplete: { path, assignment in
                         model.lastCreatedFiles = [path]
@@ -316,117 +306,6 @@ struct ContentView: View {
         let lines: String = "\(subtitle.lines.count) \(t("lines"))"
         let roles: String = "\(model.digest.roles.count) \(t("rolesCountSuffix"))"
         return "\(lines) · \(roles) · \(subtitle.sourceType.rawValue) · \(TimeTools.formatClockSeconds(model.digest.duration))"
-    }
-
-    /// левый рельс: всё, что задаёт выгрузку, собрано в одном столбце и не спорит с листом за внимание
-    private var rail: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 18) {
-                sourceSection
-                outputSection
-                formatsSection
-                srtSection
-                afterSection
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(width: 238)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .disabled(model.isWorking)
-    }
-
-    private var sourceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: t("source"))
-            Button {
-                chooseInputFile()
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.importedSubtitle.map { subtitle in subtitle.baseName } ?? t("notSelected"))
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .multilineTextAlignment(.leading)
-                        .foregroundStyle(model.importedSubtitle == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    if let subtitle: ImportedSubtitle = model.importedSubtitle {
-                        Text("\(subtitle.sourceType.rawValue) · \(subtitle.lines.count) \(t("lines"))")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1)
-                }
-            }
-            .buttonStyle(.plain)
-            .help(t("openSubtitles"))
-        }
-    }
-
-    private var outputSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: t("outputFolder"))
-            HStack(spacing: 6) {
-                TextField(t("outputFolder"), text: $outputFolder)
-                    .textFieldStyle(.roundedBorder)
-                    .labelsHidden()
-                    .font(.system(size: 11, design: .monospaced))
-                    .accessibilityLabel(t("outputFolder"))
-                Button {
-                    chooseOutputFolder()
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .help(t("chooseOutputFolder"))
-            }
-            if !outputFolderExists {
-                Label(t("hint.badOutputFolder"), systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var formatsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: t("export"))
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                FormatToggle(title: "SRT", isOn: $exportSrt)
-                FormatToggle(title: "DOCX", isOn: $exportDocx)
-                FormatToggle(title: "ASS", isOn: $exportAss)
-                FormatToggle(title: "VTT", isOn: $exportVtt)
-            }
-        }
-    }
-
-    private var srtSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: t("srtSettings"))
-            VStack(alignment: .leading, spacing: 7) {
-                Toggle(t("fullWithRoles"), isOn: $srtFullWithRoles)
-                Toggle(t("separateByRole"), isOn: $srtSeparateFiles)
-                // префикс роли - свойство тех же файлов, а не отдельный набор: вложен и гаснет без них
-                Toggle(t("separateWithPrefix"), isOn: $srtSeparateWithRoles)
-                    .padding(.leading, 18)
-                    .disabled(!srtSeparateFiles)
-            }
-            .font(.system(size: 12))
-        }
-    }
-
-    private var afterSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: t("afterProcessing"))
-            VStack(alignment: .leading, spacing: 7) {
-                Toggle(t("openFolderAfter"), isOn: $openFolderAfterProcessing)
-                Toggle(t("closeAppAfter"), isOn: $closeProgramAfterProcessing)
-            }
-            .font(.system(size: 12))
-        }
     }
 
     /// центральная колонка: сам монтажный лист, он же зона перетаскивания
@@ -599,7 +478,7 @@ struct ContentView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         if panel.runModal() == .OK, let url: URL = panel.url {
-            outputFolder = url.path
+            options.outputFolder = url.path
             model.log("\(t("outputFolderLog")): \(url.path)")
         }
     }
@@ -635,18 +514,9 @@ struct ContentView: View {
     }
 
     private func runExport() {
-        let settings: ExportSettings = ExportSettings(
-            exportAss: exportAss,
-            exportSrt: exportSrt,
-            exportVtt: exportVtt,
-            exportDocx: exportDocx,
-            srtFullWithRoles: srtFullWithRoles,
-            srtSeparateFiles: srtSeparateFiles,
-            srtSeparateWithRoles: srtSeparateWithRoles,
-            selectedRoles: selectedRoles
-        )
+        let settings: ExportSettings = options.settings(selectedRoles: selectedRoles)
         Task {
-            if await model.export(outputFolder: outputFolder, settings: settings, language: language) {
+            if await model.export(outputFolder: options.outputFolder, settings: settings, language: language) {
                 showDoneAlert = true
             }
         }
@@ -666,10 +536,10 @@ struct ContentView: View {
     }
 
     private func completeProcessing() {
-        if openFolderAfterProcessing {
-            NSWorkspace.shared.open(URL(fileURLWithPath: outputFolder))
+        if options.openFolderAfter {
+            NSWorkspace.shared.open(URL(fileURLWithPath: options.outputFolder))
         }
-        if closeProgramAfterProcessing {
+        if options.closeAppAfter {
             NSApp.terminate(nil)
         }
     }
