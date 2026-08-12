@@ -18,6 +18,8 @@ struct RoleAssignmentView: View {
     @State private var roleSettings: [RoleGenderSetting] = []
     /// распределение при текущих настройках; пересчитывается по действию, а не в body
     @State private var preview: RoleAssignmentResult?
+    /// причина, по которой распределение невозможно: она же не даёт запустить разролёвку
+    @State private var previewError: String = ""
     @State private var errorMessage: String = ""
     @State private var isWorking: Bool = false
     @State private var progress: Double = 0
@@ -33,14 +35,6 @@ struct RoleAssignmentView: View {
         self.language = language
         self.onComplete = onComplete
         self.roleCounts = RoleAssignmentService.roleReplicaCounts(subtitle: subtitle, language: language)
-    }
-
-    /// пол, для ролей которого не назначено ни одного голоса; пока он есть, разролёвка невозможна
-    private var genderWithoutVoice: VoiceGender? {
-        VoiceGender.allCases.first { gender in
-            roleSettings.contains { setting in setting.gender == gender }
-                && !voices.contains { voice in voice.gender == gender }
-        }
     }
 
     private var hasDuplicateColors: Bool {
@@ -185,13 +179,10 @@ struct RoleAssignmentView: View {
     /// предупреждения и ошибки показываются здесь же: главное окно закрыто этим листом
     @ViewBuilder
     private var messages: some View {
-        if let gender: VoiceGender = genderWithoutVoice {
-            Label(
-                L.format("error.noVoiceForGender", language, ["g": gender.title(language)]),
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .font(.footnote)
-            .foregroundStyle(.red)
+        if !previewError.isEmpty {
+            Label(previewError, systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(.red)
         } else if hasDuplicateColors {
             Label(t("warning.duplicateColors"), systemImage: "exclamationmark.triangle")
                 .font(.footnote)
@@ -224,7 +215,7 @@ struct RoleAssignmentView: View {
             }
             .keyboardShortcut(.return)
             .buttonStyle(.borderedProminent)
-            .disabled(isWorking || genderWithoutVoice != nil)
+            .disabled(isWorking || preview == nil)
         }
     }
 
@@ -237,14 +228,20 @@ struct RoleAssignmentView: View {
         return names.joined(separator: ", ")
     }
 
-    /// пересчитывает предполагаемое распределение; неполные настройки просто не дают предпросмотра
+    /// пересчитывает предполагаемое распределение и держит причину отказа на виду
     private func refreshPreview() {
-        preview = try? RoleAssignmentService.assignRoles(
-            subtitle: subtitle,
-            voices: voices,
-            roleSettings: roleSettings,
-            language: language
-        )
+        do {
+            preview = try RoleAssignmentService.assignRoles(
+                subtitle: subtitle,
+                voices: voices,
+                roleSettings: roleSettings,
+                language: language
+            )
+            previewError = ""
+        } catch {
+            preview = nil
+            previewError = L.describe(error, language)
+        }
     }
 
     private func roleGenderHints() -> [String: VoiceGender] {
