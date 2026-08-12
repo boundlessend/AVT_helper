@@ -27,8 +27,10 @@ enum L {
     private static let values: [String: [AppLanguage: String]] = [
         "about": [.ru: "О программе", .en: "About"],
         "about.description": [
-            .ru: "Конвертирует ASS, SSA, SRT, VTT и SRP в популярные форматы субтитров и DOCX с ролями, таймингами, репликами и статистикой.",
-            .en: "Converts ASS, SSA, SRT, VTT, and SRP into popular subtitle formats and DOCX files with roles, timings, dialogue, and statistics.",
+            .ru:
+                "Конвертирует ASS, SSA, SRT, VTT и SRP в популярные форматы субтитров и DOCX с ролями, таймингами, репликами и статистикой.",
+            .en:
+                "Converts ASS, SSA, SRT, VTT, and SRP into popular subtitle formats and DOCX files with roles, timings, dialogue, and statistics.",
         ],
         "version": [.ru: "Версия", .en: "Version"],
         "qa": [.ru: "Q&A", .en: "Q&A"],
@@ -103,7 +105,10 @@ enum L {
             .en: "Roles are distributed across voices by gender and line count, then highlighted with Word highlight colors.",
         ],
         "qa.q4": [.ru: "Можно ли перетащить файл?", .en: "Can I drag and drop a file?"],
-        "qa.a4": [.ru: "Да, перетащите файл прямо на монтажный лист в центре окна.", .en: "Yes. Drop a file onto the sheet in the middle of the window."],
+        "qa.a4": [
+            .ru: "Да, перетащите файл прямо на монтажный лист в центре окна.",
+            .en: "Yes. Drop a file onto the sheet in the middle of the window.",
+        ],
         "imported": [.ru: "Импортировано", .en: "Imported"],
         "lines": [.ru: "реплик", .en: "lines"],
         "createdAssignment": [.ru: "Создана разролёвка", .en: "Role assignment created"],
@@ -145,7 +150,8 @@ enum L {
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
         "error.xmlEntities": [
             .ru: "Файл объявляет DTD. Такой файл не импортируется: через объявленные сущности в субтитры попадает содержимое чужих файлов.",
-            .en: "The file declares a DTD. Such a file is not imported: declared entities can inject the contents of other files into the subtitles.",
+            .en:
+                "The file declares a DTD. Such a file is not imported: declared entities can inject the contents of other files into the subtitles.",
         ],
         "error.noLines": [
             .ru: "В файле не найдено ни одной реплики.",
@@ -161,7 +167,9 @@ enum L {
             .ru: "GitHub временно отклоняет проверки обновлений с этого адреса. Попробуйте через час.",
             .en: "GitHub is refusing update checks from this address for now. Try again in an hour.",
         ],
-        "error.updateInvalidResponse": [.ru: "Не удалось разобрать ответ сервера обновлений.", .en: "Could not parse the update server response."],
+        "error.updateInvalidResponse": [
+            .ru: "Не удалось разобрать ответ сервера обновлений.", .en: "Could not parse the update server response.",
+        ],
         "col.timing": [.ru: "Тайминг", .en: "Timing"],
         "col.role": [.ru: "Роль", .en: "Role"],
         "col.replica": [.ru: "Реплика", .en: "Line"],

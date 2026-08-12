@@ -142,7 +142,8 @@ enum SubtitleExporter {
                 if roleLines.isEmpty {
                     continue
                 }
-                let path: String = paths.reserve(folder: outputFolder, name: "\(safeBase) [\(TextTools.safeFileName(role))]", fileExtension: "srt")
+                let path: String = paths.reserve(
+                    folder: outputFolder, name: "\(safeBase) [\(TextTools.safeFileName(role))]", fileExtension: "srt")
                 jobs.append(SrtJob(path: path, lines: roleLines, includeRoles: settings.srtSeparateWithRoles))
             }
         }
@@ -156,7 +157,8 @@ enum SubtitleExporter {
             try counter.step()
             let style: String = escapeAssField(line.style.isEmpty ? "Default" : line.style)
             let role: String = escapeAssField(line.displayRoles(language).joined(separator: TextTools.assRoleSeparator))
-            output += "Dialogue: 0,\(TimeTools.formatAss(line.start)),\(TimeTools.formatAss(line.end)),\(style),\(role),0,0,0,,\(TextTools.escapeAssText(line.text))\n"
+            output +=
+                "Dialogue: 0,\(TimeTools.formatAss(line.start)),\(TimeTools.formatAss(line.end)),\(style),\(role),0,0,0,,\(TextTools.escapeAssText(line.text))\n"
         }
         try output.write(toFile: path, atomically: true, encoding: .utf8)
     }

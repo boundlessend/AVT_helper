@@ -132,7 +132,8 @@ final class ProcessingModel: ObservableObject {
         isWorking = true
         progress = 0
         let work: Task<[String], Error> = Task.detached(priority: .userInitiated) { [self] in
-            try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language) { fraction in
+            try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language) {
+                fraction in
                 Task { @MainActor in
                     self.advanceProgress(to: fraction)
                 }

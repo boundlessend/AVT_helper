@@ -240,7 +240,8 @@ final class CoreTests: XCTestCase {
             sourcePath: "",
             sourceType: .ass,
             lines: [
-                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: .unknown)
+                SubtitleLine(
+                    id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: .unknown)
             ]
         )
         var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
