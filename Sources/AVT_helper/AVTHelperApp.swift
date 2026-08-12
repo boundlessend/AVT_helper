@@ -183,11 +183,8 @@ struct ContentView: View {
         L.text(key, language)
     }
 
-    /// папка выгрузки существует и задана абсолютным путём: относительный путь создал бы папку неизвестно где
     private var outputFolderExists: Bool {
-        var isDirectory: ObjCBool = false
-        let exists: Bool = FileManager.default.fileExists(atPath: outputFolder, isDirectory: &isDirectory)
-        return outputFolder.hasPrefix("/") && exists && isDirectory.boolValue
+        OutputFolder.isUsable(outputFolder)
     }
 
     /// причина, по которой запуск невозможен; nil означает, что всё готово
@@ -197,6 +194,17 @@ struct ContentView: View {
         }
         if !exportAss && !exportSrt && !exportVtt && !exportDocx {
             return t("hint.selectFormat")
+        }
+        if !outputFolderExists {
+            return t("hint.badOutputFolder")
+        }
+        return nil
+    }
+
+    /// причина, по которой разролёвка невозможна: ей нужен файл с ролями и живая папка выгрузки
+    private var assignmentBlockReason: String? {
+        if model.importedSubtitle == nil || model.roles.isEmpty {
+            return t("hint.selectInput")
         }
         if !outputFolderExists {
             return t("hint.badOutputFolder")
@@ -232,8 +240,8 @@ struct ContentView: View {
                 } label: {
                     Label(t("makeRoleAssignment"), systemImage: "person.2")
                 }
-                .disabled(model.isWorking || model.importedSubtitle == nil || model.roles.isEmpty)
-                .help(t("makeRoleAssignment"))
+                .disabled(model.isWorking || assignmentBlockReason != nil)
+                .help(assignmentBlockReason ?? t("makeRoleAssignment"))
             }
         }
         .navigationTitle(model.importedSubtitle?.baseName ?? "AVT_helper")

@@ -38,6 +38,16 @@ enum AppLimits {
     static let maxSubtitleFileBytes: UInt64 = 50 * 1024 * 1024
 }
 
+enum OutputFolder {
+    /// папка выгрузки годится, только если путь абсолютный и ведёт в существующий каталог:
+    /// относительный путь создал бы файлы неизвестно где
+    static func isUsable(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        let exists: Bool = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        return path.hasPrefix("/") && exists && isDirectory.boolValue
+    }
+}
+
 enum Roles {
     /// метка нераспознанной роли на выбранном языке
     static func unassigned(_ language: AppLanguage) -> String {

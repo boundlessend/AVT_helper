@@ -304,6 +304,11 @@ struct RoleAssignmentView: View {
     }
 
     private func assignRoles() {
+        // папку могли удалить или переименовать, пока окно открыто: без неё запись даст системную ошибку
+        guard OutputFolder.isUsable(outputFolder) else {
+            errorMessage = t("hint.badOutputFolder")
+            return
+        }
         isWorking = true
         progress = 0
         errorMessage = ""
