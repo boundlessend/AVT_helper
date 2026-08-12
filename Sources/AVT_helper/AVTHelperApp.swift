@@ -38,13 +38,21 @@ struct AVTHelperApp: App {
 }
 
 extension Notification.Name {
-    /// пункт меню «Открыть субтитры» просит главное окно показать диалог выбора файла
+    /// просит главное окно открыть файл из object, а без него - показать диалог выбора
     static let openSubtitleFile = Notification.Name("app.openSubtitleFile")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// файл, открытый двойным кликом в Finder или перетащенный на иконку
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let first: URL = urls.first else {
+            return
+        }
+        NotificationCenter.default.post(name: .openSubtitleFile, object: first)
     }
 }
 
@@ -182,6 +190,7 @@ struct ContentView: View {
     @AppStorage("srtSeparateWithRoles") private var srtSeparateWithRoles: Bool = false
     @AppStorage("openFolderAfterProcessing") private var openFolderAfterProcessing: Bool = false
     @AppStorage("closeProgramAfterProcessing") private var closeProgramAfterProcessing: Bool = false
+    @AppStorage(RecentFiles.storageKey) private var recentFilesRaw: String = ""
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
     @State private var showHistory: Bool = false
@@ -264,8 +273,13 @@ struct ContentView: View {
                 srtSeparateFiles = true
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { _ in
-            if !model.isWorking {
+        .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { notification in
+            if model.isWorking {
+                return
+            }
+            if let url: URL = notification.object as? URL {
+                reloadInput(path: url.path)
+            } else {
                 chooseInputFile()
             }
         }
@@ -609,6 +623,9 @@ struct ContentView: View {
         Task {
             await model.importFile(path: path, language: language)
             selectedRoles = Set(model.roles)
+            if model.importedSubtitle != nil {
+                recentFilesRaw = RecentFiles.adding(path, to: recentFilesRaw)
+            }
         }
     }
 
@@ -675,6 +692,7 @@ struct ContentView: View {
 
 struct AppMenuCommands: Commands {
     @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
+    @AppStorage(RecentFiles.storageKey) private var recentFilesRaw: String = ""
     @Environment(\.openWindow) private var openWindow
 
     private var language: AppLanguage {
@@ -687,6 +705,15 @@ struct AppMenuCommands: Commands {
                 NotificationCenter.default.post(name: .openSubtitleFile, object: nil)
             }
             .keyboardShortcut("o")
+
+            Menu(L.text("openRecent", language)) {
+                ForEach(RecentFiles.parse(recentFilesRaw), id: \.self) { path in
+                    Button(URL(fileURLWithPath: path).lastPathComponent) {
+                        NotificationCenter.default.post(name: .openSubtitleFile, object: URL(fileURLWithPath: path))
+                    }
+                }
+            }
+            .disabled(RecentFiles.parse(recentFilesRaw).isEmpty)
         }
 
         CommandGroup(replacing: .appInfo) {

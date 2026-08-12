@@ -34,6 +34,7 @@ enum L {
         "qa": [.ru: "Q&A", .en: "Q&A"],
         "settings": [.ru: "Настройки", .en: "Settings"],
         "openSubtitles": [.ru: "Открыть субтитры", .en: "Open subtitles"],
+        "openRecent": [.ru: "Открыть недавние", .en: "Open Recent"],
         "chooseOutputFolder": [.ru: "Выбрать папку выгрузки", .en: "Choose output folder"],
         "start": [.ru: "Начать", .en: "Start"],
         "makeRoleAssignment": [.ru: "Сделать разролёвку", .en: "Make role assignment"],

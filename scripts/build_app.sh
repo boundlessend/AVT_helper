@@ -70,6 +70,25 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <string>public.app-category.utilities</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Subtitle file</string>
+        <key>CFBundleTypeRole</key>
+        <string>Viewer</string>
+        <key>LSHandlerRank</key>
+        <string>Alternate</string>
+        <key>CFBundleTypeExtensions</key>
+        <array>
+          <string>ass</string>
+          <string>ssa</string>
+          <string>srt</string>
+          <string>vtt</string>
+          <string>srp</string>
+        </array>
+      </dict>
+    </array>
   </dict>
 </plist>
 PLIST

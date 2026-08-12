@@ -38,6 +38,26 @@ enum AppLimits {
     static let maxSubtitleFileBytes: UInt64 = 50 * 1024 * 1024
 }
 
+/// список недавно открытых файлов для меню; хранится строками через перевод строки
+enum RecentFiles {
+    static let storageKey: String = "recentFiles"
+    private static let limit: Int = 8
+
+    /// пути, которые ещё существуют: удалённый файл в меню только раздражает
+    static func parse(_ raw: String) -> [String] {
+        raw
+            .components(separatedBy: "\n")
+            .filter { path in !path.isEmpty && FileManager.default.fileExists(atPath: path) }
+    }
+
+    /// новый путь встаёт первым, повтор поднимается наверх, хвост за пределами лимита отбрасывается
+    static func adding(_ path: String, to raw: String) -> String {
+        ([path] + parse(raw).filter { current in current != path })
+            .prefix(limit)
+            .joined(separator: "\n")
+    }
+}
+
 enum OutputFolder {
     /// папка выгрузки годится, только если путь абсолютный и ведёт в существующий каталог:
     /// относительный путь создал бы файлы неизвестно где
