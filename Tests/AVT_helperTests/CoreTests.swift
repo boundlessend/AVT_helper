@@ -409,7 +409,10 @@ final class CoreTests: XCTestCase {
     func testTextTools() {
         XCTAssertEqual(TextTools.cleanRoleName("   "), "")
         XCTAssertEqual(TextTools.cleanRoleName("Anna / Bob"), "Anna_Bob")
-        XCTAssertEqual(TextTools.extractBracketRoles("[Anna] hi [Bob]"), ["Anna", "Bob"])
+        XCTAssertEqual(TextTools.extractBracketRoles("[Anna][Bob] hi"), ["Anna", "Bob"])
+        XCTAssertEqual(TextTools.extractBracketRoles("[Anna] hi [loudly]"), ["Anna"])
+        XCTAssertEqual(TextTools.extractBracketRoles("Он крикнул [громко] и ушёл"), [])
+        XCTAssertEqual(TextTools.extractBracketRoles("[Anna] раз\n[Bob] два"), ["Anna", "Bob"])
         XCTAssertEqual(TextTools.safeFileName("a/b:c"), "a_b_c")
         XCTAssertEqual(TextTools.xmlEscape("a<b>&\"'"), "a&lt;b&gt;&amp;&quot;&apos;")
     }

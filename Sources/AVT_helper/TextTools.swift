@@ -55,35 +55,43 @@ enum TextTools {
             .replacingOccurrences(of: "\r", with: "\\N")
     }
 
+    /// пометки роли стоят в начале строки; те же скобки посреди реплики - это ремарка, а не имя
+    private static let leadingRolesPattern: String = #"^\s*(\[[^\]]+\]\s*)+"#
+
     static func extractBracketRoles(_ input: String) -> [String] {
-        guard let regex: NSRegularExpression = try? NSRegularExpression(pattern: #"\[(.*?)\]"#) else {
+        guard let regex: NSRegularExpression = try? NSRegularExpression(pattern: #"\[([^\]]*)\]"#) else {
             return []
         }
 
-        let range: NSRange = NSRange(input.startIndex..<input.endIndex, in: input)
-        let matches: [NSTextCheckingResult] = regex.matches(in: input, range: range)
-        let extracted: [String] = matches.compactMap { match in
-            guard let groupRange: Range<String.Index> = Range(match.range(at: 1), in: input) else {
-                return nil
+        let extracted: [String] = normalizedLines(input).flatMap { line -> [String] in
+            guard let prefixRange: Range<String.Index> = line.range(of: leadingRolesPattern, options: [.regularExpression]) else {
+                return []
             }
-            return String(input[groupRange])
+            let prefix: String = String(line[prefixRange])
+            let range: NSRange = NSRange(prefix.startIndex..<prefix.endIndex, in: prefix)
+            return regex.matches(in: prefix, range: range).compactMap { match in
+                guard let groupRange: Range<String.Index> = Range(match.range(at: 1), in: prefix) else {
+                    return nil
+                }
+                return String(prefix[groupRange])
+            }
         }
         return normalizedRoles(extracted)
     }
 
     static func removeLeadingBracketRoles(_ input: String) -> String {
-        input
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .components(separatedBy: "\n")
+        normalizedLines(input)
             .map { line in
-                line.replacingOccurrences(
-                    of: #"^\s*(\[[^\]]+\]\s*)+"#,
-                    with: "",
-                    options: [.regularExpression]
-                )
+                line.replacingOccurrences(of: leadingRolesPattern, with: "", options: [.regularExpression])
             }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedLines(_ input: String) -> [String] {
+        input
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
     }
 
     static func squareRolePrefix(_ roles: [String]) -> String {
