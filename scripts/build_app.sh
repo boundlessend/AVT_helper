@@ -15,12 +15,15 @@ ICONSET_DIR="${BUILD_DIR}/AppIcon.iconset"
 RELEASE_VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//' || true)"
 RELEASE_VERSION="${RELEASE_VERSION:-0.0.0}"
 
+# CFBundleVersion обязан расти между сборками, поэтому это число коммитов, а не версия релиза
+BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD 2>/dev/null || echo 1)"
+
 # сборка вне тега или с незакоммиченными правками помечается как dev, иначе она выдаёт себя за релиз
 if git -C "${ROOT_DIR}" describe --tags --exact-match >/dev/null 2>&1 && [ -z "$(git -C "${ROOT_DIR}" status --porcelain)" ]; then
-  VERSION="${RELEASE_VERSION}"
+  BUILD_STAGE="release"
 else
   COMMIT="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  VERSION="${RELEASE_VERSION}-dev.${COMMIT}"
+  BUILD_STAGE="dev.${COMMIT}"
 fi
 
 cd "${ROOT_DIR}"
@@ -57,9 +60,11 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>${RELEASE_VERSION}</string>
+    <string>${BUILD_NUMBER}</string>
     <key>CFBundleShortVersionString</key>
-    <string>${VERSION}</string>
+    <string>${RELEASE_VERSION}</string>
+    <key>AVTBuildStage</key>
+    <string>${BUILD_STAGE}</string>
     <key>CFBundleIconFile</key>
     <string>AVT_helper</string>
     <key>NSHumanReadableCopyright</key>

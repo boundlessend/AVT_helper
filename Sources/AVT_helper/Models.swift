@@ -83,9 +83,16 @@ enum Roles {
 }
 
 enum AppInfo {
-    /// версия приложения из Info.plist собранного бандла
+    /// версия релиза: она же сравнивается с версией последнего релиза на GitHub
     static var shortVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    }
+
+    /// номер сборки и её происхождение: «релиз» или коммит, из которого собрана эта копия
+    static var buildLabel: String {
+        let build: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+        let stage: String = Bundle.main.infoDictionary?["AVTBuildStage"] as? String ?? "dev"
+        return stage == "release" ? build : "\(build), \(stage)"
     }
 }
 

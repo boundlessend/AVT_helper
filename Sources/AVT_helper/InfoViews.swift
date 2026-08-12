@@ -70,8 +70,9 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("AVT_helper")
                         .font(.title2.weight(.bold))
-                    Text("\(L.text("version", language)) \(AppInfo.shortVersion)")
+                    Text("\(L.text("version", language)) \(AppInfo.shortVersion) (\(AppInfo.buildLabel))")
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
 
