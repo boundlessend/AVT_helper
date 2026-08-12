@@ -334,7 +334,10 @@ struct RoleAssignmentView: View {
                         fileSuffix: suffix,
                         progress: { fraction in
                             Task { @MainActor in
-                                progress = fraction
+                                // порядок доставки задач не гарантирован, поэтому полоска только растёт
+                                if fraction > progress {
+                                    progress = fraction
+                                }
                             }
                         }
                     )

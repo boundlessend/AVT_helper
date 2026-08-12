@@ -75,6 +75,14 @@ final class ProcessingModel: ObservableObject {
         }
     }
 
+    /// каждый процент приходит отдельной задачей, а их порядок не гарантирован:
+    /// полоска движется только вперёд, иначе она дёргается назад на глазах у пользователя
+    private func advanceProgress(to fraction: Double) {
+        if fraction > progress {
+            progress = fraction
+        }
+    }
+
     /// прерывает текущий импорт или экспорт
     func cancel() {
         cancelCurrentWork?()
@@ -86,7 +94,7 @@ final class ProcessingModel: ObservableObject {
         let work: Task<ImportedSubtitle, Error> = Task.detached(priority: .userInitiated) { [self] in
             try SubtitleImporter.importFile(path: path, language: language) { fraction in
                 Task { @MainActor in
-                    self.progress = fraction
+                    self.advanceProgress(to: fraction)
                 }
             }
         }
@@ -119,7 +127,7 @@ final class ProcessingModel: ObservableObject {
         let work: Task<[String], Error> = Task.detached(priority: .userInitiated) { [self] in
             try SubtitleExporter.export(subtitle: subtitle, outputFolder: outputFolder, settings: settings, language: language) { fraction in
                 Task { @MainActor in
-                    self.progress = fraction
+                    self.advanceProgress(to: fraction)
                 }
             }
         }
