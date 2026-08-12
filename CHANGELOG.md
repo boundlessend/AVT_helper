@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-12
+
 ### Added
 
 - Check-for-updates button in the About window: it queries the latest GitHub release, reports whether a newer version exists, and offers a download link.
@@ -113,7 +115,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Initial macOS app: imports ASS, SSA, SRT, VTT, and SRP; exports ASS, SRT, VTT, and DOCX dialogue tables with role assignment and Word highlight colors.
 
-[unreleased]: https://github.com/boundlessend/AVT_helper/compare/v.1.6.5...HEAD
+[unreleased]: https://github.com/boundlessend/AVT_helper/compare/v.1.7.0...HEAD
+[1.7.0]: https://github.com/boundlessend/AVT_helper/compare/v.1.6.5...v.1.7.0
 [1.6.5]: https://github.com/boundlessend/AVT_helper/compare/v.1.6.0...v.1.6.5
 [1.6.0]: https://github.com/boundlessend/AVT_helper/compare/v.1.5.0...v.1.6.0
 [1.5.0]: https://github.com/boundlessend/AVT_helper/compare/v.1.0.0...v.1.5.0

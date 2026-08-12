@@ -70,10 +70,23 @@ jobs:
             .build/AVT_helper.dmg
             .build/AVT_helper.dmg.sha256
 
+      - name: Collect release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version#.}"
+          awk -v heading="## [${version}]" '
+            index($0, heading) == 1 { inside = 1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
+
       - name: Upload DMG to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             .build/AVT_helper.dmg
             .build/AVT_helper.dmg.sha256
