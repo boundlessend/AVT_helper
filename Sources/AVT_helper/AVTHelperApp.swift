@@ -254,6 +254,12 @@ struct ContentView: View {
         }
         .navigationTitle(model.importedSubtitle?.baseName ?? "AVT_helper")
         .navigationSubtitle(windowSubtitle)
+        .onAppear {
+            // до вложенности префикс роли включался сам по себе: сохраняем прежний результат такой настройки
+            if srtSeparateWithRoles && !srtSeparateFiles {
+                srtSeparateFiles = true
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFile)) { _ in
             if !model.isWorking {
                 chooseInputFile()
@@ -389,7 +395,10 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Toggle(t("fullWithRoles"), isOn: $srtFullWithRoles)
                 Toggle(t("separateByRole"), isOn: $srtSeparateFiles)
+                // префикс роли - свойство тех же файлов, а не отдельный набор: вложен и гаснет без них
                 Toggle(t("separateWithPrefix"), isOn: $srtSeparateWithRoles)
+                    .padding(.leading, 18)
+                    .disabled(!srtSeparateFiles)
             }
             .font(.system(size: 12))
         }
@@ -506,7 +515,8 @@ struct ContentView: View {
             Button(t("start")) {
                 runExport()
             }
-            .keyboardShortcut(.return)
+            // Cmd+Return, а не Return: иначе ввод пути в поле папки заканчивался запуском обработки
+            .keyboardShortcut(.return, modifiers: .command)
             .disabled(model.isWorking || startBlockReason != nil)
             .help(startBlockReason ?? t("start"))
         }

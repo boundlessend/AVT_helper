@@ -120,7 +120,7 @@ enum SubtitleExporter {
         paths: inout OutputPathAllocator
     ) -> [SrtJob] {
         let safeBase: String = TextTools.safeFileName(subtitle.baseName)
-        let hasMode: Bool = settings.srtFullWithRoles || settings.srtSeparateFiles || settings.srtSeparateWithRoles
+        let hasMode: Bool = settings.srtFullWithRoles || settings.srtSeparateFiles
 
         if !hasMode {
             let path: String = paths.reserve(folder: outputFolder, name: "\(safeBase) [FULL]", fileExtension: "srt")
@@ -133,7 +133,7 @@ enum SubtitleExporter {
             jobs.append(SrtJob(path: path, lines: subtitle.lines, includeRoles: true))
         }
 
-        if settings.srtSeparateFiles || settings.srtSeparateWithRoles {
+        if settings.srtSeparateFiles {
             let roles: [String] = Array(settings.selectedRoles).sorted()
             for role in roles {
                 let roleLines: [SubtitleLine] = subtitle.lines.filter { line in
