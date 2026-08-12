@@ -141,6 +141,10 @@ enum L {
             .en: "Several voices share one highlight color and will look identical in the document.",
         ],
         "error.decodeFailed": [.ru: "Не удалось определить кодировку файла.", .en: "Could not detect the file encoding."],
+        "error.xmlEntities": [
+            .ru: "Файл объявляет DTD. Такой файл не импортируется: через объявленные сущности в субтитры попадает содержимое чужих файлов.",
+            .en: "The file declares a DTD. Such a file is not imported: declared entities can inject the contents of other files into the subtitles.",
+        ],
         "error.noLines": [
             .ru: "В файле не найдено ни одной реплики.",
             .en: "The file contains no dialogue lines.",

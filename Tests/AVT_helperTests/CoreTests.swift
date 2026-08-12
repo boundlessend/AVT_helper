@@ -303,6 +303,33 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(imported.lines.last?.start ?? 0, 3, accuracy: 0.0001)
     }
 
+    func testSrpRejectsExternalEntities() throws {
+        let secret = FileManager.default.temporaryDirectory.appendingPathComponent("avt_secret_\(UUID().uuidString).txt")
+        try Data("СЕКРЕТ".utf8).write(to: secret)
+        defer { try? FileManager.default.removeItem(at: secret) }
+        let body = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <!DOCTYPE Root [ <!ENTITY leak SYSTEM "file://\(secret.path)"> ]>
+            <Root>
+              <DocumentElement>
+                <Character>&leak;</Character>
+                <Sex>М</Sex>
+                <BeginTime>00:00:01,000</BeginTime>
+                <EndTime>00:00:02,000</EndTime>
+                <Text>текст</Text>
+              </DocumentElement>
+            </Root>
+            """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).srp")
+        try Data(body.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        XCTAssertThrowsError(try SubtitleImporter.importFile(path: url.path, language: .ru)) { error in
+            XCTAssertFalse(L.describe(error, .ru).contains("СЕКРЕТ"))
+            XCTAssertTrue(L.describe(error, .ru).contains("DTD"))
+        }
+    }
+
     func testImportRejectsFileWithoutLines() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("avt_\(UUID().uuidString).srt")

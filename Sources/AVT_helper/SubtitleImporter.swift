@@ -17,7 +17,7 @@ enum SubtitleImporter {
         case .vtt:
             lines = try importVtt(text: text, progress: progress)
         case .srp:
-            lines = try importSrp(text: text, progress: progress)
+            lines = try importSrp(text: text, language: language, progress: progress)
         }
 
         if lines.isEmpty {
@@ -188,9 +188,14 @@ enum SubtitleImporter {
         }
     }
 
-    private static func importSrp(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+    private static func importSrp(text: String, language: AppLanguage, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
         let data: Data = Data(text.utf8)
-        let document: XMLDocument = try XMLDocument(data: data, options: [.nodePreserveWhitespace])
+        // внешние сущности выключены: иначе чужой SRP прочитает локальный файл или сходит в сеть при импорте
+        let document: XMLDocument = try XMLDocument(data: data, options: [.nodePreserveWhitespace, .nodeLoadExternalEntitiesNever])
+        // DTD в субтитрах не нужен ни одному инструменту, зато через него разворачивают сущности-бомбы
+        if document.dtd != nil {
+            throw SubtitleError.importFailed(L.text("error.xmlEntities", language))
+        }
         let nodes: [XMLNode] = try document.nodes(forXPath: "//DocumentElement")
         var counter: ProgressCounter = ProgressCounter(total: nodes.count, report: progress)
         return try nodes.compactMap { node in
