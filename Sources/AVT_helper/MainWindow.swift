@@ -138,7 +138,7 @@ struct ContentView: View {
     private var menuActions: WindowActions {
         let start: (() -> Void)? = canStart ? { runExport() } : nil
         let assign: (() -> Void)? = canAssign ? { showRoleAssignment = true } : nil
-        return WindowActions(open: { chooseInputFiles() }, start: start, assign: assign)
+        return WindowActions(start: start, assign: assign)
     }
 
     private func handleOpenRequest(_ notification: Notification) {
@@ -394,9 +394,7 @@ struct RolesColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionLabel(text: L.plural("count.roles", language, digest.roles.count))
-                Spacer()
+            SectionHeader(text: L.plural("count.roles", language, digest.roles.count)) {
                 Button(L.text("selectAll", language)) {
                     selectedRoles = Set(digest.roles)
                 }
@@ -472,10 +470,7 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 10) {
             if model.isWorking {
-                ProgressView(value: progress.value)
-                    .frame(width: 120)
-                Text("\(Int(progress.value * 100))%")
-                    .monospacedDigit()
+                ProgressReadout(progress: progress)
                 Button(L.text("cancel", language)) {
                     model.cancel()
                 }

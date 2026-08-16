@@ -73,9 +73,7 @@ struct RoleAssignmentView: View {
 
     private var voicePanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionLabel(text: t("voices"))
-                Spacer()
+            SectionHeader(text: t("voices")) {
                 Stepper(
                     "\(t("voiceCount")): \(setup.voices.count)",
                     value: Binding(
@@ -137,9 +135,7 @@ struct RoleAssignmentView: View {
 
     private var rolePanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                SectionLabel(text: L.plural("count.roles", language, roleSettings.count))
-                Spacer()
+            SectionHeader(text: L.plural("count.roles", language, roleSettings.count)) {
                 // двадцать ролей поштучно через выпадающий список никто не переберёт,
                 // а исходник пол приносит только у SRP
                 Text(t("gender.setAll"))
@@ -206,11 +202,7 @@ struct RoleAssignmentView: View {
                 .foregroundStyle(.secondary)
             Spacer()
             if isWorking {
-                ProgressView(value: progress.value)
-                    .frame(width: 120)
-                Text("\(Int(progress.value * 100))%")
-                    .monospacedDigit()
-                    .font(.footnote)
+                ProgressReadout(progress: progress)
             }
             Button(t("cancel")) {
                 dismiss()

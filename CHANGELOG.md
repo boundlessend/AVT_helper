@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The export format buttons use the system accent color, and text set in capitals is styled rather than uppercased, so VoiceOver reads names as names.
 - Dropping a file the app cannot read no longer highlights the drop zone first and complains after.
 - The bundle declares its subtitle types properly (`LSItemContentTypes` and imported UTIs), carries a real copyright string, and no longer allows sudden termination while files are being written.
+- The controls that appeared in more than one place - `Close`, `Check for Updates…`, the section headers and the progress readout - are one view each, so the copies can no longer drift apart.
 - The design mockups moved to `docs/design`.
 - The SwiftPM cache step was dropped from CI: there are no dependencies to cache.
 

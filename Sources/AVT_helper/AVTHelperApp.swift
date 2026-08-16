@@ -86,7 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// действия главного окна, поднятые в меню. nil означает, что окна нет или действие сейчас
 /// невозможно, и пункт меню гаснет сам
 struct WindowActions {
-    let open: () -> Void
     let start: (() -> Void)?
     let assign: (() -> Void)?
 }
@@ -108,7 +107,6 @@ struct AppMenuCommands: Commands {
     @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.windowActions) private var actions
-    @ObservedObject private var updates: UpdateController = .shared
     @ObservedObject private var recent: RecentFiles = .shared
 
     private var language: AppLanguage {
@@ -156,10 +154,7 @@ struct AppMenuCommands: Commands {
             Button(L.text("about", language)) {
                 openWindow(id: "about")
             }
-            Button(L.text("update.check", language)) {
-                Task { await updates.checkNow(language: language) }
-            }
-            .disabled(updates.isChecking)
+            UpdateCheckButton(language: language)
         }
 
         // главное окно закрывается вместе с остальными, и без этого пункта вернуть его нечем

@@ -15,6 +15,52 @@ struct SectionLabel: View {
     }
 }
 
+/// шапка секции: подпись слева, её кнопки справа. один и тот же ряд стоит над очередью,
+/// списком ролей и обеими таблицами разролёвки
+struct SectionHeader<Trailing: View>: View {
+    let text: String
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack {
+            SectionLabel(text: text)
+            Spacer()
+            trailing()
+        }
+    }
+}
+
+/// нижний ряд вспомогательного окна: «Закрыть» справа и на Escape, как во всех окнах системы
+struct DismissFooter: View {
+    let language: AppLanguage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Button(L.text("close", language)) {
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+        }
+    }
+}
+
+/// ход работы: полоса и процент рядом. одинаковы в строке состояния и в листе разролёвки
+struct ProgressReadout: View {
+    @ObservedObject var progress: ProgressBox
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView(value: progress.value)
+                .frame(width: 120)
+            Text("\(Int(progress.value * 100))%")
+                .monospacedDigit()
+        }
+        .font(.footnote)
+    }
+}
+
 /// имя роли под маркером того цвета, которым роль будет выделена в DOCX
 struct RoleTag: View {
     let role: String

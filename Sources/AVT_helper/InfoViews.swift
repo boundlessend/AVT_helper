@@ -25,9 +25,22 @@ struct SettingsWindow: View {
     }
 }
 
+/// проверка обновлений: одна кнопка на меню программы и окно «О программе»,
+/// чтобы условие занятости не разъехалось между ними
+struct UpdateCheckButton: View {
+    let language: AppLanguage
+    @ObservedObject private var updates: UpdateController = .shared
+
+    var body: some View {
+        Button(L.text("update.check", language)) {
+            Task { await updates.checkNow(language: language) }
+        }
+        .disabled(updates.isChecking)
+    }
+}
+
 struct AboutView: View {
     let language: AppLanguage
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var updates: UpdateController = .shared
 
     var body: some View {
@@ -49,10 +62,7 @@ struct AboutView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button(L.text("update.check", language)) {
-                    Task { await updates.checkNow(language: language) }
-                }
-                .disabled(updates.isChecking)
+                UpdateCheckButton(language: language)
                 if updates.isChecking {
                     ProgressView()
                         .controlSize(.small)
@@ -78,13 +88,7 @@ struct AboutView: View {
 
             Spacer(minLength: 0)
 
-            HStack {
-                Spacer()
-                Button(L.text("close", language)) {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-            }
+            DismissFooter(language: language)
         }
         .padding(18)
         .frame(minWidth: 400, minHeight: 300)
@@ -93,7 +97,6 @@ struct AboutView: View {
 
 struct QAView: View {
     let language: AppLanguage
-    @Environment(\.dismiss) private var dismiss
 
     private var items: [(String, String)] {
         [
@@ -122,13 +125,7 @@ struct QAView: View {
                 }
             }
 
-            HStack {
-                Spacer()
-                Button(L.text("close", language)) {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-            }
+            DismissFooter(language: language)
         }
         .padding(18)
         .frame(minWidth: 480, minHeight: 340)

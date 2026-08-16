@@ -31,9 +31,7 @@ struct ExportRailView: View {
     /// а показанный файл выбирают здесь же
     private var sourceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                SectionLabel(text: t("source"))
-                Spacer()
+            SectionHeader(text: t("source")) {
                 if !model.queue.isEmpty {
                     Button(t("queue.clear")) {
                         model.clearQueue()
