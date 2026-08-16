@@ -33,28 +33,36 @@ Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically. Import a
 1. Download `AVT_helper.dmg` from the latest release.
 2. Open `AVT_helper.dmg`.
 3. Drag `AVT_helper.app` to `Applications`.
-4. Open `AVT_helper.app` from `Applications`.
+4. The build is signed but not notarized, so Gatekeeper blocks the first launch. Open it this way once: **right click** (or Control-click) the app in `Applications` and choose **Open**, then confirm in the dialog. If macOS still refuses, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
 
-If macOS blocks the first launch, run:
+After the first launch macOS remembers the choice and opens the app normally.
+
+If the app is reported as damaged, the quarantine flag is the cause. Clear it once in Terminal, without `sudo`: the app belongs to you after the copy.
 
 ```bash
-sudo xattr -rd com.apple.quarantine "/Applications/AVT_helper.app"
+xattr -dr com.apple.quarantine "/Applications/AVT_helper.app"
 ```
-
-Then open the app again.
 
 ## Usage
 
-> On first launch the interface follows the system language. Switch it in `Settings` (`Cmd+,`) -> `App language`.
+> The interface follows the system language. Pick a different one in `Settings` (`Cmd+,`) -> `App language`; menus and system panels follow after the relaunch the app offers.
 
-1. Click `Open subtitles` (`Cmd+O`), drop a subtitle file onto the sheet in the middle of the window, or open the file from Finder. The last eight files are under `File` -> `Open Recent`.
+1. Click `Open subtitles` (`Cmd+O`), drop subtitle files onto the sheet in the middle of the window, or open them from Finder. Recent files are under `File` -> `Open Recent`.
 2. Choose the output folder in the left rail. It is remembered between launches.
 3. Select one or more export formats: `ASS`, `SRT`, `VTT`, or `DOCX`.
 4. Check the roles you need in the role list on the right if you export separate SRT files per role.
-5. Click `Start` (`Cmd+Return`). A long run can be stopped with `Cancel`.
-6. To create a role-assignment DOCX, load a file with roles and click `Make role assignment`.
+5. Click `Start` (`Cmd+Return`, also in the `Process` menu). A long run can be stopped with `Cancel`.
+6. To create a role-assignment DOCX, load a file with roles and click `Make role assignment` (`Cmd+Shift+R`).
 
 Existing files are never overwritten: a numbered suffix is added to the new file instead.
+
+### A queue of files
+
+Drop or open several files at once and they queue up in the left rail. `Start` runs the whole queue with the same export settings, marking every file with what came of it. The sheet shows the file you select; the role checkboxes belong to that file, and the other files export all of their own roles. Role assignment stays per file, because every episode has its own cast.
+
+### What ASS export keeps
+
+The `[Script Info]` and `[V4+ Styles]` blocks of the source file are carried over, so style names still resolve and the frame size survives. Inline override tags inside a line (`{\i1}` and the like) are dropped at import: the window shows a dubbing sheet, not typesetting. Lines whose style is not declared in the file fall back to `Default` rather than pointing at a style that does not exist.
 
 ## DOCX Output
 

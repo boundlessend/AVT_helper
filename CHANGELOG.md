@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **ASS export pointed at styles that were not in the file.** The `[Script Info]` and `[V4+ Styles]` blocks of the source are now carried over, so style names resolve and the frame size survives the round trip. A line whose style is not declared falls back to `Default` instead of naming a style no player can find.
+- **An interrupted import threw away the file already on screen.** Cancelling or failing to read a second file now leaves the first one loaded.
+- **A failed export said nothing about the files it had already written.** The error names them and they are listed in the completion alert.
+- **DOCX carried no role colors unless a role assignment had been made**, although the window showed them and the README promised the two would match. The colors of the sheet now reach every DOCX.
+- **A line spoken by several characters was highlighted with one color.** Every role of a chorus line keeps the color of its own voice.
+- **UTF-16 files without a byte order mark decoded into text full of holes**, because a zero byte is valid UTF-8. Encodings are now sniffed and each candidate is inspected before it is accepted; a file that decodes into nothing readable is refused instead of arriving as a file with no dialogue lines.
+- **A very long role name broke the export mid-run** by producing a file name past the file system limit. Names are truncated on a character boundary.
+- **The `Format:` line of `[Events]` was ignored** and the field order assumed. A file that declares its own order now imports correctly.
+- Russian counts had a single form everywhere: "1 реплик", "2 реплик". Numbers of lines, roles and files now decline properly through `.stringsdict`.
+- The file size in the too-large error is stated in megabytes rather than bytes.
+- Voices could be raised to twelve while only eight highlight colors exist, so the duplicate-color warning could not be dismissed. Eight is the ceiling.
+- DOCX files no longer carry the author of the program in their properties.
+
+### Changed
+
+- **A queue of files.** Several files can be opened or dropped at once; `Start` runs the whole queue with the same export settings and marks each file with what came of it. The sheet shows the file you pick. Role assignment stays per file.
+- **The app language now moves the menus with it.** The choice is written to `AppleLanguages`, and the app offers to relaunch so that menus, the open panel and system buttons speak the same language as the window. A third option, `Same as system`, was added.
+- `Start` and `Make role assignment` are in a `Process` menu with keyboard shortcuts, `Check for Updates…` is in the app menu, `Q&A` moved to the `Help` menu, and the `Window` menu can bring the main window back after it has been closed.
+- The app checks for a new version once a week in the background, with a switch in settings. It still downloads nothing by itself.
+- The settings window is a grouped form with the title drawn by the system, as macOS settings are.
+- Columns of the main window are draggable, so the dialogue column is no longer squeezed by two fixed rails.
+- The status bar names why `Start` is unavailable instead of hiding it in a tooltip, and the message log behind it is marked with an icon.
+- The role checkboxes are disabled unless separate files by role are on, and the hint says so.
+- `Open Recent` is the system menu from `NSDocumentController`, with icons and `Clear Menu`. The list starts empty once, because the old one was kept privately.
+- Voices of a role assignment persist between runs, roles can be set to one gender in a click, and the sheet's buttons sit at the bottom with `Cancel` on Escape.
+- The export format buttons use the system accent color, and text set in capitals is styled rather than uppercased, so VoiceOver reads names as names.
+- Dropping a file the app cannot read no longer highlights the drop zone first and complains after.
+- The bundle declares its subtitle types properly (`LSItemContentTypes` and imported UTIs), carries a real copyright string, and no longer allows sudden termination while files are being written.
+- The design mockups moved to `docs/design`.
+- The SwiftPM cache step was dropped from CI: there are no dependencies to cache.
+
 ## [1.7.0] - 2026-08-12
 
 ### Added
