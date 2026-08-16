@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Russian counts had a single form everywhere: "1 реплик", "2 реплик". Numbers of lines, roles and files now decline properly through `.stringsdict`.
 - The file size in the too-large error is stated in megabytes rather than bytes.
 - Voices could be raised to twelve while only eight highlight colors exist, so the duplicate-color warning could not be dismissed. Eight is the ceiling.
+- `Cmd+Return` was declared twice, on the `Start` button and on its menu item, and the two competed for the keystroke. The menu item owns it.
 - DOCX files no longer carry the author of the program in their properties.
 
 ### Changed

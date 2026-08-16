@@ -499,10 +499,11 @@ struct StatusBar: View {
                     .lineLimit(1)
             }
 
+            // сочетание клавиш объявлено один раз, у пункта меню «Обработка»: второе такое же
+            // на кнопке спорит с ним за нажатие и не даёт системе показать его в меню
             Button(L.text("start", language)) {
                 onStart()
             }
-            .keyboardShortcut(.return, modifiers: .command)
             .disabled(model.isWorking || blockReason != nil)
         }
         .font(.footnote)
