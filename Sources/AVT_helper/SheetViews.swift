@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// подпись секции монтажного листа: заглавными с разрядкой
+/// подпись секции монтажного листа: заглавными с разрядкой.
+/// регистр меняет начертание, а не сам текст: uppercased() отдал бы VoiceOver строку,
+/// которую он читает по буквам
 struct SectionLabel: View {
     let text: String
 
     var body: some View {
-        Text(text.uppercased())
+        Text(text)
+            .textCase(.uppercase)
             .font(.system(size: 10, weight: .semibold))
             .tracking(1.0)
             .foregroundStyle(.tertiary)
@@ -18,7 +21,8 @@ struct RoleTag: View {
     let color: WordHighlightColor?
 
     var body: some View {
-        Text(role.uppercased())
+        Text(role)
+            .textCase(.uppercase)
             .font(.system(size: 11, weight: .semibold))
             .tracking(0.4)
             .lineLimit(1)
@@ -28,6 +32,7 @@ struct RoleTag: View {
             .background(color.map { swatch in RoleColors.swatch(swatch) } ?? Color.clear)
             .foregroundStyle(color == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(RoleColors.inkOnSwatch))
             .clipShape(RoundedRectangle(cornerRadius: 3))
+            .accessibilityLabel(role)
     }
 }
 
@@ -155,6 +160,8 @@ struct RoleRow: View {
     let color: WordHighlightColor?
     /// номер назначенного голоса; до разролёвки его нет
     let voice: Int?
+    /// отметка что-то значит только при раздельных файлах по ролям
+    let isSelectable: Bool
     let language: AppLanguage
     @Binding var isSelected: Bool
 
@@ -178,6 +185,7 @@ struct RoleRow: View {
                     }
                 }
                 .toggleStyle(.checkbox)
+                .disabled(!isSelectable)
                 Spacer(minLength: 8)
                 if let voice: Int = voice {
                     Text("\(L.text("voiceShort", language))\(voice)")
@@ -206,38 +214,27 @@ struct RoleRow: View {
             .padding(.leading, 20)
         }
         .padding(.vertical, 2)
-        .opacity(isSelected ? 1 : 0.62)
+        .opacity(isSelectable && !isSelected ? 0.62 : 1)
     }
 }
 
-/// кнопка формата экспорта: включённый формат заливается основным цветом схемы
+/// кнопка формата экспорта: включённый формат заливается акцентным цветом системы,
+/// потому что это выбор пользователя, а не наше представление о выделении
 struct FormatToggle: View {
     let title: String
     @Binding var isOn: Bool
 
     var body: some View {
-        Button {
-            isOn.toggle()
-        } label: {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(isOn ? AnyShapeStyle(Color(nsColor: .textBackgroundColor)) : AnyShapeStyle(Color.clear))
-                    .frame(width: 5, height: 5)
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 32)
-            .background(isOn ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color(nsColor: .textBackgroundColor)))
-            .foregroundStyle(isOn ? AnyShapeStyle(Color(nsColor: .textBackgroundColor)) : AnyShapeStyle(.secondary))
-            .clipShape(RoundedRectangle(cornerRadius: 7))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7)
-                    .strokeBorder(.quaternary, lineWidth: isOn ? 0 : 1)
-            }
+        Toggle(isOn: $isOn) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .frame(maxWidth: .infinity)
+                .frame(height: 22)
         }
-        .buttonStyle(.plain)
+        // без buttonStyle поверх: он перекрывает заливку включённого состояния,
+        // и включённый формат становится неотличим от выключенного
+        .toggleStyle(.button)
+        .tint(.accentColor)
         .accessibilityLabel(title)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

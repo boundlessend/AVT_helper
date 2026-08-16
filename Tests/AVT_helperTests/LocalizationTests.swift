@@ -30,6 +30,68 @@ final class LocalizationTests: XCTestCase {
         XCTAssertTrue(en.values.allSatisfy { value in !value.isEmpty })
     }
 
+    /// русский требует трёх форм, и правило для 11-14 не совпадает с правилом для 1-4.
+    /// формы приходят из .stringsdict, а он читается только через бандл нужного языка
+    func testPluralFormsFollowTheLanguageRules() {
+        XCTAssertEqual(L.plural("count.lines", .ru, 1), "1 реплика")
+        XCTAssertEqual(L.plural("count.lines", .ru, 2), "2 реплики")
+        XCTAssertEqual(L.plural("count.lines", .ru, 5), "5 реплик")
+        XCTAssertEqual(L.plural("count.lines", .ru, 11), "11 реплик")
+        XCTAssertEqual(L.plural("count.lines", .ru, 21), "21 реплика")
+        XCTAssertEqual(L.plural("count.roles", .ru, 3), "3 роли")
+        XCTAssertEqual(L.plural("count.files", .ru, 0), "0 файлов")
+        XCTAssertEqual(L.plural("count.lines", .en, 1), "1 line")
+        XCTAssertEqual(L.plural("count.lines", .en, 2), "2 lines")
+    }
+
+    /// в обоих языках объявлены одни и те же формы множественного числа
+    func testBothLanguagesCarryTheSamePluralKeys() throws {
+        let ru: Set<String> = try Set(pluralTable(.ru).keys)
+        let en: Set<String> = try Set(pluralTable(.en).keys)
+
+        XCTAssertFalse(ru.isEmpty)
+        XCTAssertEqual(ru, en)
+    }
+
+    private func pluralTable(_ language: AppLanguage) throws -> [String: Any] {
+        let bundle: Bundle = L.bundle(language)
+        let url: URL = try XCTUnwrap(bundle.url(forResource: "Localizable", withExtension: "stringsdict"))
+        return try XCTUnwrap(NSDictionary(contentsOf: url) as? [String: Any])
+    }
+
+    /// выбор языка обязан дойти до AppleLanguages: меню и системные панели читают только его.
+    /// проверяется домен программы, а не итоговое значение: без своего ключа UserDefaults
+    /// отдаёт общесистемный список, и «как в системе» именно так и выглядит
+    @MainActor
+    func testLanguagePreferenceWritesAppleLanguages() throws {
+        let name: String = "avt.test.\(UUID().uuidString)"
+        let defaults: UserDefaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        // свежая установка на «как в системе» перезапуска не требует
+        XCTAssertFalse(LanguagePreference.system.needsRelaunch(defaults))
+        XCTAssertTrue(LanguagePreference.en.needsRelaunch(defaults))
+
+        LanguagePreference.en.apply(defaults)
+        XCTAssertEqual(
+            defaults.persistentDomain(forName: name)?[LanguagePreference.appleLanguagesKey] as? [String],
+            ["en"]
+        )
+        XCTAssertFalse(LanguagePreference.en.needsRelaunch(defaults))
+        XCTAssertTrue(LanguagePreference.system.needsRelaunch(defaults))
+
+        LanguagePreference.system.apply(defaults)
+        XCTAssertNil(defaults.persistentDomain(forName: name)?[LanguagePreference.appleLanguagesKey])
+        XCTAssertFalse(LanguagePreference.system.needsRelaunch(defaults))
+    }
+
+    /// неизвестное значение означает «как в системе», а не молчаливый русский
+    func testUnknownPreferenceFollowsTheSystem() {
+        XCTAssertEqual(LanguagePreference.resolve(nil), .system)
+        XCTAssertEqual(LanguagePreference.resolve("klingon"), .system)
+        XCTAssertEqual(LanguagePreference.resolve("en"), .en)
+    }
+
     /// язык выбирается в программе, а не системой: каждый должен приходить из своего бандла
     func testLanguageSelectsItsOwnBundle() {
         XCTAssertEqual(L.text("start", .ru), "Начать")
@@ -38,9 +100,9 @@ final class LocalizationTests: XCTestCase {
     }
 
     func testEveryKeyUsedInCodeExists() throws {
-        let known: Set<String> = Set(try table(.ru).keys)
+        let known: Set<String> = try Set(table(.ru).keys).union(pluralTable(.ru).keys)
         // граница перед t обязательна, иначе под шаблон попадают Text( и keyboardShortcut(
-        let pattern = try NSRegularExpression(pattern: #"(?:L\.text|L\.format|(?<![\w.])t)\(\s*"([\w.]+)""#)
+        let pattern = try NSRegularExpression(pattern: #"(?:L\.text|L\.format|L\.plural|(?<![\w.])t)\(\s*"([\w.]+)""#)
         let files: [URL] = try FileManager.default
             .contentsOfDirectory(at: sourcesDirectory, includingPropertiesForKeys: nil)
             .filter { url in url.pathExtension == "swift" }

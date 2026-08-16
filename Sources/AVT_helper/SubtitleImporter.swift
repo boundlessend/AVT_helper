@@ -8,10 +8,13 @@ enum SubtitleImporter {
         try validateFile(url: url, language: language)
         let text: String = try readText(url: url, language: language)
         let lines: [SubtitleLine]
+        var script: AssScript?
 
         switch sourceType {
         case .ass, .ssa:
-            lines = try importAss(text: text, progress: progress)
+            let document: AssDocument = try importAss(text: text, progress: progress)
+            lines = document.lines
+            script = document.script
         case .srt:
             lines = try importSrt(text: text, progress: progress)
         case .vtt:
@@ -33,7 +36,8 @@ enum SubtitleImporter {
                     return left.end < right.end
                 }
                 return left.start < right.start
-            }
+            },
+            assScript: script
         )
     }
 
@@ -66,25 +70,80 @@ enum SubtitleImporter {
                 L.format(
                     "error.fileTooLarge", language,
                     [
-                        "size": String(fileSize),
-                        "max": String(AppLimits.maxSubtitleFileBytes),
+                        "size": L.fileSize(fileSize),
+                        "max": L.fileSize(AppLimits.maxSubtitleFileBytes),
                     ]))
         }
     }
 
-    /// читает файл, подбирая кодировку: BOM, затем UTF-8, Windows-1251 и Latin-1
+    /// читает файл, подбирая кодировку: BOM, затем UTF-8, UTF-16 без BOM, Windows-1251 и Latin-1.
+    /// «декодировалось» само по себе ничего не значит: UTF-16 без BOM проходит проверку UTF-8,
+    /// потому что нулевой байт - допустимый символ, и на выходе получается текст в дырках.
+    /// поэтому каждый кандидат ещё и осматривается
     private static func readText(url: URL, language: AppLanguage) throws -> String {
         let data: Data = try Data(contentsOf: url)
         if let bomDecoded: String = decodeByBom(data: data) {
             return bomDecoded
         }
+        if let wide: String = decodeUtf16WithoutBom(data: data) {
+            return wide
+        }
         let candidates: [String.Encoding] = [.utf8, windowsCyrillic, .isoLatin1]
         for encoding in candidates {
-            if let text: String = String(data: data, encoding: encoding) {
+            if let text: String = String(data: data, encoding: encoding), isPlausibleText(text) {
                 return text
             }
         }
         throw SubtitleError.importFailed(L.text("error.decodeFailed", language))
+    }
+
+    /// UTF-16 без BOM опознаётся по нулевым байтам, а не попыткой раскодировать:
+    /// раскодировать удаётся любые чётные данные, и однобайтовый текст молча стал бы иероглифами.
+    /// в субтитрах достаточно ASCII (цифры таймкода, двоеточия, стрелки), чтобы нули были заметны
+    private static func decodeUtf16WithoutBom(data: Data) -> String? {
+        guard data.count >= 4, data.count.isMultiple(of: 2) else {
+            return nil
+        }
+        let sample: Data = data.prefix(4096)
+        var evenZeros: Int = 0
+        var oddZeros: Int = 0
+        for (index, byte) in sample.enumerated() where byte == 0 {
+            if index.isMultiple(of: 2) {
+                evenZeros += 1
+            } else {
+                oddZeros += 1
+            }
+        }
+        let threshold: Int = sample.count / 8
+        if oddZeros > threshold, evenZeros * 4 <= oddZeros {
+            return String(data: data, encoding: .utf16LittleEndian)
+        }
+        if evenZeros > threshold, oddZeros * 4 <= evenZeros {
+            return String(data: data, encoding: .utf16BigEndian)
+        }
+        return nil
+    }
+
+    /// текст субтитров состоит из печатных символов и переводов строки. управляющие символы
+    /// и знаки замены означают, что кодировку подобрали неверно, а не что файл такой
+    private static func isPlausibleText(_ text: String) -> Bool {
+        var total: Int = 0
+        var broken: Int = 0
+        for scalar in text.unicodeScalars {
+            total += 1
+            switch scalar.value {
+            case 0x09, 0x0A, 0x0D:
+                continue
+            case 0..<0x20, 0x7F..<0xA0, 0xFFFD:
+                broken += 1
+            default:
+                continue
+            }
+        }
+        if total == 0 {
+            return false
+        }
+        return Double(broken) / Double(total) < 0.01
     }
 
     private static func decodeByBom(data: Data) -> String? {
@@ -103,38 +162,125 @@ enum SubtitleImporter {
         return String.Encoding(rawValue: raw)
     }()
 
-    private static func importAss(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+    /// реплики файла вместе с его заголовком: заголовок нужен экспорту, чтобы стили не осиротели
+    private struct AssDocument {
+        let lines: [SubtitleLine]
+        let script: AssScript?
+    }
+
+    /// порядок полей строки Dialogue по умолчанию. формат разрешает свой порядок,
+    /// и он объявлен строкой Format внутри [Events]
+    private static let defaultAssFields: [String] = [
+        "layer", "start", "end", "style", "name", "marginl", "marginr", "marginv", "effect", "text",
+    ]
+
+    private static func importAss(text: String, progress: @escaping ProgressHandler) throws -> AssDocument {
         let rawLines: [String] = text.components(separatedBy: .newlines)
         var counter: ProgressCounter = ProgressCounter(total: rawLines.count, report: progress)
-        return try rawLines.compactMap { rawLine in
+
+        var section: String = ""
+        var scriptInfo: [String] = []
+        var styles: [String] = []
+        var stylesSection: String = ""
+        var fields: [String] = defaultAssFields
+        var lines: [SubtitleLine] = []
+
+        for rawLine in rawLines {
             try counter.step()
-            guard rawLine.range(of: "Dialogue:", options: [.caseInsensitive, .anchored]) != nil else {
-                return nil
-            }
-            let payload: String = String(rawLine.dropFirst("Dialogue:".count))
-            let parts: [Substring] = payload.split(separator: ",", maxSplits: 9, omittingEmptySubsequences: false)
-            guard parts.count >= 10,
-                let start: TimeInterval = try? TimeTools.parseAss(String(parts[1])),
-                let end: TimeInterval = try? TimeTools.parseAss(String(parts[2]))
-            else {
-                return nil
+            let trimmed: String = rawLine.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                section = trimmed.lowercased()
+                if section.contains("styles") {
+                    stylesSection = trimmed
+                }
+                continue
             }
 
-            let style: String = String(parts[3]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let name: String = String(parts[4]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let effect: String = String(parts[8]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let role: String = inferAssRole(name: name, style: style, effect: effect)
-            return SubtitleLine(
-                id: UUID(),
-                start: start,
-                end: end,
-                roles: TextTools.normalizedRoles(role.components(separatedBy: TextTools.assRoleSeparator)),
-                text: TextTools.cleanAssText(String(parts[9])),
-                style: style,
-                effect: effect,
-                sex: .unknown
-            )
+            switch section {
+            case "[script info]":
+                scriptInfo.append(trimmed)
+            case let name where name.contains("styles"):
+                styles.append(trimmed)
+            case "[events]":
+                if let declared: [String] = assFieldOrder(trimmed) {
+                    fields = declared
+                    continue
+                }
+                if let line: SubtitleLine = parseAssDialogue(trimmed, fields: fields) {
+                    lines.append(line)
+                }
+            default:
+                continue
+            }
         }
+
+        let script: AssScript? =
+            styles.isEmpty
+            ? nil
+            : AssScript(
+                scriptInfo: scriptInfo,
+                styles: styles,
+                stylesSection: stylesSection
+            )
+        return AssDocument(lines: lines, script: script)
+    }
+
+    /// читает строку Format блока [Events]; nil означает, что это не она
+    private static func assFieldOrder(_ line: String) -> [String]? {
+        guard line.range(of: "Format:", options: [.caseInsensitive, .anchored]) != nil else {
+            return nil
+        }
+        let declared: [String] =
+            line
+            .dropFirst("Format:".count)
+            .components(separatedBy: ",")
+            .map { field in field.trimmingCharacters(in: .whitespaces).lowercased() }
+        // текст обязан идти последним: только он имеет право содержать запятые
+        guard declared.count >= 4, declared.last == "text" else {
+            return nil
+        }
+        return declared
+    }
+
+    private static func parseAssDialogue(_ line: String, fields: [String]) -> SubtitleLine? {
+        guard line.range(of: "Dialogue:", options: [.caseInsensitive, .anchored]) != nil else {
+            return nil
+        }
+        let payload: String = String(line.dropFirst("Dialogue:".count))
+        let parts: [Substring] = payload.split(
+            separator: ",",
+            maxSplits: fields.count - 1,
+            omittingEmptySubsequences: false
+        )
+        guard parts.count == fields.count else {
+            return nil
+        }
+
+        let value: (String) -> String = { name in
+            guard let index: Int = fields.firstIndex(of: name) else {
+                return ""
+            }
+            return String(parts[index]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let start: TimeInterval = try? TimeTools.parseAss(value("start")),
+            let end: TimeInterval = try? TimeTools.parseAss(value("end"))
+        else {
+            return nil
+        }
+
+        let style: String = value("style")
+        let effect: String = value("effect")
+        let role: String = inferAssRole(name: value("name"), style: style, effect: effect)
+        return SubtitleLine(
+            id: UUID(),
+            start: start,
+            end: end,
+            roles: TextTools.normalizedRoles(role.components(separatedBy: TextTools.assRoleSeparator)),
+            text: TextTools.cleanAssText(value("text")),
+            style: style,
+            effect: effect,
+            sex: .unknown
+        )
     }
 
     private static func importSrt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
@@ -269,7 +415,7 @@ enum SubtitleImporter {
 
     /// выбирает имя роли из полей строки Dialogue; пустая строка означает, что роль не распознана
     private static func inferAssRole(name: String, style: String, effect: String) -> String {
-        if !name.isEmpty && !Roles.isUnassigned(name) {
+        if !name.isEmpty && !Roles.isOwnPlaceholder(name) {
             return name
         }
         if !style.isEmpty && style.caseInsensitiveCompare("Default") != .orderedSame {

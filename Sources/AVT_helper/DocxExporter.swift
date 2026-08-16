@@ -5,6 +5,7 @@ enum DocxExporter {
     static func export(
         subtitle: ImportedSubtitle,
         outputFolder: String,
+        digest: SubtitleDigest,
         language: AppLanguage,
         paths: inout OutputPathAllocator,
         roleHighlights: [String: WordHighlightColor] = [:],
@@ -12,12 +13,13 @@ enum DocxExporter {
         fileSuffix: String = "",
         progress: @escaping ProgressHandler = { _ in }
     ) throws -> String {
-        let name: String = "\(TextTools.safeFileName(subtitle.baseName))\(fileSuffix)"
+        let name: String = TextTools.safeFileName("\(subtitle.baseName)\(fileSuffix)")
         let outputPath: String = paths.reserve(folder: outputFolder, name: name, fileExtension: "docx")
         var counter: ProgressCounter = ProgressCounter(total: subtitle.lines.count, report: progress)
         try write(
             path: outputPath,
             subtitle: subtitle,
+            digest: digest,
             language: language,
             counter: &counter,
             roleHighlights: roleHighlights,
@@ -30,6 +32,7 @@ enum DocxExporter {
     static func write(
         path: String,
         subtitle: ImportedSubtitle,
+        digest: SubtitleDigest,
         language: AppLanguage,
         counter: inout ProgressCounter,
         roleHighlights: [String: WordHighlightColor] = [:],
@@ -37,6 +40,7 @@ enum DocxExporter {
     ) throws {
         let entries: [ZipArchive.Entry] = try docxEntries(
             subtitle: subtitle,
+            digest: digest,
             language: language,
             roleHighlights: roleHighlights,
             voiceSummaries: voiceSummaries,
@@ -47,6 +51,7 @@ enum DocxExporter {
 
     private static func docxEntries(
         subtitle: ImportedSubtitle,
+        digest: SubtitleDigest,
         language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
         voiceSummaries: [VoiceRoleSummary],
@@ -63,6 +68,7 @@ enum DocxExporter {
                 data: Data(
                     try documentXml(
                         subtitle: subtitle,
+                        digest: digest,
                         language: language,
                         roleHighlights: roleHighlights,
                         voiceSummaries: voiceSummaries,
@@ -76,6 +82,7 @@ enum DocxExporter {
 
     private static func documentXml(
         subtitle: ImportedSubtitle,
+        digest: SubtitleDigest,
         language: AppLanguage,
         roleHighlights: [String: WordHighlightColor],
         voiceSummaries: [VoiceRoleSummary],
@@ -84,20 +91,19 @@ enum DocxExporter {
         var rows: String = ""
         for line in subtitle.lines {
             try counter.step()
-            let roles: [String] = line.displayRoles(language)
             rows += tableRow(
                 timing: TimeTools.formatClockSeconds(line.start),
-                role: roles.joined(separator: " / "),
+                roles: line.displayRoles(language),
                 replica: line.text,
-                roleHighlight: highlightForRoles(roles, roleHighlights: roleHighlights)
+                roleHighlights: roleHighlights
             )
         }
 
-        let rolesLine: String = subtitle.allRoles(language).joined(separator: ", ")
+        let rolesLine: String = digest.roles.joined(separator: ", ")
         let voiceSummaryXml: String = voiceSummaries.map { summary in
             voiceSummaryParagraph(summary, language: language)
         }.joined()
-        let statistics: String = roleStatistics(subtitle: subtitle, language: language)
+        let statistics: String = roleStatistics(digest: digest)
         return """
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -106,7 +112,7 @@ enum DocxExporter {
                 \(paragraph(rolesLine, bold: false, center: false, fontSize: "22", highlight: nil))
                 \(voiceSummaryXml)
                 <w:tbl>
-                  <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr>
+                  <w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/></w:tblPr>
                   <w:tblGrid><w:gridCol w:w="1100"/><w:gridCol w:w="1800"/><w:gridCol w:w="8200"/></w:tblGrid>
                   \(headerRow(language: language))
                   \(rows)
@@ -139,40 +145,60 @@ enum DocxExporter {
         """
     }
 
-    private static func roleStatistics(subtitle: ImportedSubtitle, language: AppLanguage) -> String {
-        var order: [String] = []
-        var counts: [String: Int] = [:]
-        for role in subtitle.lines.flatMap({ line in line.displayRoles(language) }) {
-            if let existing: String = order.first(where: { current in current.caseInsensitiveCompare(role) == .orderedSame }) {
-                counts[existing, default: 0] += 1
-            } else {
-                order.append(role)
-                counts[role] = 1
-            }
-        }
-        return
-            order
-            .sorted { left, right in left.localizedCaseInsensitiveCompare(right) == .orderedAscending }
+    /// счётчики уже посчитаны при импорте: считать их здесь заново означало бы держать
+    /// две реализации одной величины и однажды разойтись с тем, что показано в окне
+    private static func roleStatistics(digest: SubtitleDigest) -> String {
+        digest.roles
             .map { role in
-                paragraph("\(role) - \(counts[role, default: 0])", bold: false, center: false, fontSize: "22", highlight: nil)
+                paragraph("\(role) - \(digest.counts[role, default: 0])", bold: false, center: false, fontSize: "22", highlight: nil)
             }
             .joined()
     }
 
-    private static func tableRow(timing: String, role: String, replica: String, roleHighlight: WordHighlightColor?) -> String {
+    private static func tableRow(
+        timing: String,
+        roles: [String],
+        replica: String,
+        roleHighlights: [String: WordHighlightColor]
+    ) -> String {
         """
         <w:tr>
           \(tableCell(timing, width: "1100", bold: false, alignment: "center", highlight: nil))
-          \(tableCell(role, width: "1800", bold: true, alignment: "center", highlight: roleHighlight))
+          \(roleCell(roles, roleHighlights: roleHighlights))
           \(tableCell(replica, width: "8200", bold: false, alignment: "left", highlight: nil))
         </w:tr>
         """
+    }
+
+    /// каждая роль хоровой реплики выделяется своим цветом: одна заливка на всю ячейку
+    /// прятала бы то, что вторую роль читает другой голос
+    private static func roleCell(_ roles: [String], roleHighlights: [String: WordHighlightColor]) -> String {
+        let runs: String = roles.enumerated().map { index, role in
+            let separator: String = index == 0 ? "" : run(" / ", bold: true, fontSize: "22", highlight: nil)
+            return separator + run(role, bold: true, fontSize: "22", highlight: highlight(for: role, in: roleHighlights))
+        }.joined()
+        return """
+            <w:tc><w:tcPr><w:tcW w:w="1800" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>\(runs)</w:p></w:tc>
+            """
     }
 
     private static func tableCell(_ value: String, width: String, bold: Bool, alignment: String, highlight: WordHighlightColor?) -> String {
         """
         <w:tc><w:tcPr><w:tcW w:w="\(width)" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>\(paragraph(value, bold: bold, center: false, fontSize: "22", alignment: alignment, highlight: highlight))</w:tc>
         """
+    }
+
+    /// один прогон текста: единица, из которой собираются и абзац, и ячейка с несколькими цветами
+    private static func run(_ value: String, bold: Bool, fontSize: String, highlight: WordHighlightColor?) -> String {
+        let boldXml: String = bold ? "<w:b/>" : ""
+        let highlightXml: String = highlight.map { color in #"<w:highlight w:val="\#(color.rawValue)"/>"# } ?? ""
+        let escapedLines: [String] = value.components(separatedBy: .newlines).map { line in TextTools.xmlEscape(line) }
+        let textXml: String = escapedLines.enumerated().map { index, line in
+            index == 0 ? #"<w:t xml:space="preserve">\#(line)</w:t>"# : #"<w:br/><w:t xml:space="preserve">\#(line)</w:t>"#
+        }.joined()
+        return """
+            <w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="\(fontSize)"/>\(boldXml)\(highlightXml)</w:rPr>\(textXml)</w:r>
+            """
     }
 
     private static func paragraph(
@@ -183,31 +209,20 @@ enum DocxExporter {
         alignment: String = "",
         highlight: WordHighlightColor?
     ) -> String {
-        let boldXml: String = bold ? "<w:b/>" : ""
-        let highlightXml: String = highlight.map { color in #"<w:highlight w:val="\#(color.rawValue)"/>"# } ?? ""
         let alignmentValue: String = center ? "center" : alignment
         let paragraphProperties: String = alignmentValue.isEmpty ? "" : #"<w:pPr><w:jc w:val="\#(alignmentValue)"/></w:pPr>"#
-        let escapedLines: [String] = value.components(separatedBy: .newlines).map { line in TextTools.xmlEscape(line) }
-        let textXml: String = escapedLines.enumerated().map { index, line in
-            index == 0 ? #"<w:t xml:space="preserve">\#(line)</w:t>"# : #"<w:br/><w:t xml:space="preserve">\#(line)</w:t>"#
-        }.joined()
         return """
-            <w:p>\(paragraphProperties)<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="\(fontSize)"/>\(boldXml)\(highlightXml)</w:rPr>\(textXml)</w:r></w:p>
+            <w:p>\(paragraphProperties)\(run(value, bold: bold, fontSize: fontSize, highlight: highlight))</w:p>
             """
     }
 
-    private static func highlightForRoles(_ roles: [String], roleHighlights: [String: WordHighlightColor]) -> WordHighlightColor? {
-        for role in roles {
-            if let color: WordHighlightColor = roleHighlights[role] {
-                return color
-            }
-            if let color: WordHighlightColor = roleHighlights.first(where: { key, _ in
-                key.caseInsensitiveCompare(role) == .orderedSame
-            })?.value {
-                return color
-            }
+    private static func highlight(for role: String, in roleHighlights: [String: WordHighlightColor]) -> WordHighlightColor? {
+        if let color: WordHighlightColor = roleHighlights[role] {
+            return color
         }
-        return nil
+        return roleHighlights.first { key, _ in
+            key.caseInsensitiveCompare(role) == .orderedSame
+        }?.value
     }
 
     private static func contentTypes() -> String {
@@ -251,17 +266,21 @@ enum DocxExporter {
         """
     }
 
+    /// автор документа не заполняется: файл делает пользователь, а не автор программы,
+    /// и подписывать его чужим именем в свойствах файла нечестно
     private static func coreProps() -> String {
         """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>@boundlessend</dc:creator></cp:coreProperties>
+        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator></dc:creator><cp:lastModifiedBy></cp:lastModifiedBy></cp:coreProperties>
         """
     }
 
+    /// рамки таблицы объявлены стилем, а не повторены в каждой таблице:
+    /// иначе стиль лежит в пакете мёртвым грузом
     private static func stylesXml() -> String {
         """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/></w:style></w:styles>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/><w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/><w:insideH w:val="single" w:sz="6"/><w:insideV w:val="single" w:sz="6"/></w:tblBorders></w:tblPr></w:style></w:styles>
         """
     }
 }

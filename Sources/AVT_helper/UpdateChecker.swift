@@ -2,7 +2,7 @@ import Foundation
 
 /// клиент GitHub Releases для проверки наличия новой версии приложения
 enum UpdateChecker {
-    struct ReleaseInfo {
+    struct ReleaseInfo: Sendable {
         let version: String
         let pageUrl: URL
     }
@@ -67,6 +67,78 @@ enum UpdateChecker {
             case tagName = "tag_name"
             case htmlUrl = "html_url"
         }
+    }
+}
+
+/// когда программа сама ходит на страницу релизов. проверка ничего не скачивает и не ставит:
+/// она только сообщает, что версия вышла, и открывает браузер
+@MainActor
+final class UpdateController: ObservableObject {
+    /// один на приложение: проверку зовут и меню, и окно «О программе», и запуск,
+    /// а ходить в сеть трижды за одним ответом незачем
+    static let shared: UpdateController = UpdateController()
+
+    private enum Key {
+        static let automatic: String = "checkUpdatesAutomatically"
+        static let lastCheck: String = "lastUpdateCheck"
+    }
+
+    /// неделя: программой пользуются каждый день, а релизы выходят реже
+    private static let interval: TimeInterval = 7 * 24 * 3600
+
+    @Published private(set) var available: UpdateChecker.ReleaseInfo?
+    @Published private(set) var isChecking: Bool = false
+    @Published private(set) var message: String = ""
+    @Published var automatic: Bool {
+        didSet { defaults.set(automatic, forKey: Key.automatic) }
+    }
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        automatic = defaults.object(forKey: Key.automatic) as? Bool ?? true
+    }
+
+    private var lastCheck: Date? {
+        get { defaults.object(forKey: Key.lastCheck) as? Date }
+        set { defaults.set(newValue, forKey: Key.lastCheck) }
+    }
+
+    /// фоновая проверка при запуске: молчит, если срок не вышел или её выключили
+    func checkIfDue(language: AppLanguage) async {
+        guard automatic else {
+            return
+        }
+        if let last: Date = lastCheck, Date().timeIntervalSince(last) < Self.interval {
+            return
+        }
+        await check(language: language, announceUpToDate: false)
+    }
+
+    /// проверка по нажатию: говорит и тогда, когда новой версии нет
+    func checkNow(language: AppLanguage) async {
+        await check(language: language, announceUpToDate: true)
+    }
+
+    private func check(language: AppLanguage, announceUpToDate: Bool) async {
+        isChecking = true
+        message = ""
+        do {
+            let release: UpdateChecker.ReleaseInfo = try await UpdateChecker.fetchLatest()
+            lastCheck = Date()
+            if UpdateChecker.isNewer(release.version, than: AppInfo.shortVersion) {
+                available = release
+                message = L.format("update.available", language, ["v": release.version])
+            } else {
+                available = nil
+                message = announceUpToDate ? L.text("update.latest", language) : ""
+            }
+        } catch {
+            available = nil
+            message = announceUpToDate ? L.describe(error, language) : ""
+        }
+        isChecking = false
     }
 }
 

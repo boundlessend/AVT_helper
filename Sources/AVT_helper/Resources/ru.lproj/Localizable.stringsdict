@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>count.lines</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d реплика</string>
+			<key>few</key>
+			<string>%d реплики</string>
+			<key>many</key>
+			<string>%d реплик</string>
+			<key>other</key>
+			<string>%d реплики</string>
+		</dict>
+	</dict>
+	<key>count.roles</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d роль</string>
+			<key>few</key>
+			<string>%d роли</string>
+			<key>many</key>
+			<string>%d ролей</string>
+			<key>other</key>
+			<string>%d роли</string>
+		</dict>
+	</dict>
+	<key>count.files</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d файл</string>
+			<key>few</key>
+			<string>%d файла</string>
+			<key>many</key>
+			<string>%d файлов</string>
+			<key>other</key>
+			<string>%d файла</string>
+		</dict>
+	</dict>
+	<key>count.moreFiles</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>и ещё %d файл</string>
+			<key>few</key>
+			<string>и ещё %d файла</string>
+			<key>many</key>
+			<string>и ещё %d файлов</string>
+			<key>other</key>
+			<string>и ещё %d файла</string>
+		</dict>
+	</dict>
+	<key>count.queuedFiles</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d файл в очереди</string>
+			<key>few</key>
+			<string>%d файла в очереди</string>
+			<key>many</key>
+			<string>%d файлов в очереди</string>
+			<key>other</key>
+			<string>%d файла в очереди</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

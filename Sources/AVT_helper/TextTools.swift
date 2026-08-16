@@ -134,6 +134,8 @@ enum TextTools {
             .joined()
     }
 
+    /// имя файла без запрещённых символов и не длиннее предела файловой системы:
+    /// длинная роль в имени иначе роняет запись посреди прогона
     static func safeFileName(_ input: String) -> String {
         let invalid: CharacterSet = CharacterSet(charactersIn: "/\\?%*|\"<>:")
         let clean: String =
@@ -141,7 +143,25 @@ enum TextTools {
             .components(separatedBy: invalid)
             .joined(separator: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return clean.isEmpty ? "export" : clean
+        return clean.isEmpty ? "export" : truncated(clean, toBytes: AppLimits.maxFileNameBytes)
+    }
+
+    /// обрезает строку по границе символа так, чтобы её длина в UTF-8 уложилась в предел
+    private static func truncated(_ input: String, toBytes limit: Int) -> String {
+        if input.utf8.count <= limit {
+            return input
+        }
+        var result: String = ""
+        var used: Int = 0
+        for character in input {
+            let size: Int = String(character).utf8.count
+            if used + size > limit {
+                break
+            }
+            result.append(character)
+            used += size
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// экранирует спецсимволы и выбрасывает символы, недопустимые в XML 1.0: иначе Word отказывается открывать docx

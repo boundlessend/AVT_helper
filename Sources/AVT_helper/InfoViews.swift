@@ -1,69 +1,38 @@
+import AppKit
 import SwiftUI
 
 struct AboutWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
-
-    private var language: AppLanguage {
-        AppLanguage.resolve(appLanguageRaw)
-    }
+    @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
 
     var body: some View {
-        AboutView(language: language)
+        AboutView(language: AppLanguage.resolve(appLanguageRaw))
     }
 }
 
 struct QAWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
-
-    private var language: AppLanguage {
-        AppLanguage.resolve(appLanguageRaw)
-    }
+    @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
 
     var body: some View {
-        QAView(language: language)
+        QAView(language: AppLanguage.resolve(appLanguageRaw))
     }
 }
 
 struct SettingsWindow: View {
-    @AppStorage(AppLanguage.storageKey) private var appLanguageRaw: String = AppLanguage.systemDefault.rawValue
+    @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
 
     var body: some View {
-        SettingsView(languageRaw: $appLanguageRaw)
-    }
-}
-
-/// общий заголовок вспомогательных окон с кнопкой закрытия
-struct WindowHeader: View {
-    let title: String
-    let systemImage: String?
-    let closeTitle: String
-    let onClose: () -> Void
-
-    var body: some View {
-        HStack {
-            if let systemImage: String = systemImage {
-                Label(title, systemImage: systemImage)
-                    .font(.title2.weight(.bold))
-            } else {
-                Text(title)
-                    .font(.title2.weight(.bold))
-            }
-            Spacer()
-            Button(closeTitle, action: onClose)
-        }
+        SettingsView(preferenceRaw: $appLanguageRaw)
     }
 }
 
 struct AboutView: View {
     let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
-    @State private var updateStatus: String = ""
-    @State private var updatePageUrl: URL?
-    @State private var isCheckingUpdates: Bool = false
+    @ObservedObject private var updates: UpdateController = .shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            HStack(spacing: 12) {
                 Image(nsImage: NSApplication.shared.applicationIconImage)
                     .resizable()
                     .frame(width: 56, height: 56)
@@ -81,60 +50,44 @@ struct AboutView: View {
 
             HStack {
                 Button(L.text("update.check", language)) {
-                    checkForUpdates()
+                    Task { await updates.checkNow(language: language) }
                 }
-                .disabled(isCheckingUpdates)
-                if isCheckingUpdates {
+                .disabled(updates.isChecking)
+                if updates.isChecking {
                     ProgressView()
                         .controlSize(.small)
                 }
-                if let updatePageUrl: URL = updatePageUrl {
+                if let release: UpdateChecker.ReleaseInfo = updates.available {
                     Button(L.text("update.download", language)) {
-                        NSWorkspace.shared.open(updatePageUrl)
+                        NSWorkspace.shared.open(release.pageUrl)
                     }
                     .buttonStyle(.borderedProminent)
                 }
             }
 
-            if !updateStatus.isEmpty {
-                Text(updateStatus)
+            if !updates.message.isEmpty {
+                Text(updates.message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("@boundlessend")
-                .fontWeight(.semibold)
+            Text(AppInfo.copyright)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             HStack {
                 Spacer()
                 Button(L.text("close", language)) {
                     dismiss()
                 }
+                .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(16)
-    }
-
-    private func checkForUpdates() {
-        isCheckingUpdates = true
-        updateStatus = ""
-        updatePageUrl = nil
-        Task {
-            do {
-                let release: UpdateChecker.ReleaseInfo = try await UpdateChecker.fetchLatest()
-                if UpdateChecker.isNewer(release.version, than: AppInfo.shortVersion) {
-                    updateStatus = L.format("update.available", language, ["v": release.version])
-                    updatePageUrl = release.pageUrl
-                } else {
-                    updateStatus = L.text("update.latest", language)
-                }
-            } catch {
-                updateStatus = L.describe(error, language)
-            }
-            isCheckingUpdates = false
-        }
+        .padding(18)
+        .frame(minWidth: 400, minHeight: 300)
     }
 }
 
@@ -148,18 +101,12 @@ struct QAView: View {
             ("qa.q2", "qa.a2"),
             ("qa.q3", "qa.a3"),
             ("qa.q4", "qa.a4"),
+            ("qa.q5", "qa.a5"),
         ]
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            WindowHeader(
-                title: L.text("qa", language),
-                systemImage: "questionmark.circle",
-                closeTitle: L.text("close", language),
-                onClose: { dismiss() }
-            )
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(items, id: \.0) { item in
@@ -168,37 +115,88 @@ struct QAView: View {
                                 .fontWeight(.semibold)
                             Text(L.text(item.1, language))
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
+
+            HStack {
+                Spacer()
+                Button(L.text("close", language)) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
         }
-        .padding(16)
+        .padding(18)
+        .frame(minWidth: 480, minHeight: 340)
     }
 }
 
+/// окно настроек рисует система: заголовок принадлежит окну, а содержимое - сгруппированной форме,
+/// как во всех настройках macOS
 struct SettingsView: View {
-    @Binding var languageRaw: String
+    @Binding var preferenceRaw: String
+    @ObservedObject private var updates: UpdateController = .shared
+    @State private var showsRelaunch: Bool = false
+
+    private var preference: LanguagePreference {
+        LanguagePreference.resolve(preferenceRaw)
+    }
 
     private var language: AppLanguage {
-        AppLanguage.resolve(languageRaw)
+        preference.language
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(L.text("settings", language), systemImage: "gearshape")
-                .font(.title2.weight(.bold))
-
-            Picker(L.text("settings.language", language), selection: $languageRaw) {
-                ForEach(AppLanguage.allCases) { item in
-                    Text(item.title).tag(item.rawValue)
+        Form {
+            Section {
+                Picker(L.text("settings.language", language), selection: $preferenceRaw) {
+                    ForEach(LanguagePreference.allCases) { item in
+                        Text(item.title(language)).tag(item.rawValue)
+                    }
                 }
+            } footer: {
+                Text(L.text("settings.language.hint", language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .pickerStyle(.segmented)
 
-            Spacer()
+            Section {
+                Toggle(L.text("settings.autoUpdate", language), isOn: $updates.automatic)
+            } footer: {
+                Text(L.text("settings.autoUpdate.hint", language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(16)
+        .formStyle(.grouped)
+        .frame(width: 460, height: 300)
+        .onChange(of: preferenceRaw) { _, _ in
+            // меню, панель открытия файла и кнопки алертов рисует AppKit по AppleLanguages,
+            // и он читает их один раз при запуске
+            showsRelaunch = preference.needsRelaunch()
+            preference.apply()
+        }
+        .alert(L.text("settings.relaunch.title", language), isPresented: $showsRelaunch) {
+            Button(L.text("settings.relaunch.now", language)) {
+                relaunch()
+            }
+            Button(L.text("settings.relaunch.later", language), role: .cancel) {}
+        } message: {
+            Text(L.text("settings.relaunch.message", language))
+        }
+    }
+
+    private func relaunch() {
+        let configuration: NSWorkspace.OpenConfiguration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, _ in
+            Task { @MainActor in
+                NSApp.terminate(nil)
+            }
+        }
     }
 }

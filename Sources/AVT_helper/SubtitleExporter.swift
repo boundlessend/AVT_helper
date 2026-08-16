@@ -1,5 +1,12 @@
 import Foundation
 
+/// экспорт прервался, но часть файлов уже записана: пути нужны интерфейсу, чтобы назвать их,
+/// а причина - чтобы объяснить, почему остальных нет
+struct PartialExportError: Error {
+    let created: [String]
+    let cause: Error
+}
+
 /// выдаёт пути для новых файлов одного прогона экспорта: не затирает ни исходный файл,
 /// ни уже лежащие на диске, ни выданные ранее в этом же прогоне
 struct OutputPathAllocator {
@@ -41,10 +48,12 @@ enum SubtitleExporter {
         subtitle: ImportedSubtitle,
         outputFolder: String,
         settings: ExportSettings,
+        digest: SubtitleDigest,
         language: AppLanguage,
         progress: @escaping ProgressHandler = { _ in }
     ) throws -> [String] {
-        try FileManager.default.createDirectory(atPath: outputFolder, withIntermediateDirectories: true)
+        // существование папки проверяет интерфейс до запуска: создавать её здесь означало бы
+        // молча насыпать файлов по опечатке в пути
         var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: subtitle.sourcePath)
 
         let assPath: String? =
@@ -73,21 +82,37 @@ enum SubtitleExporter {
         var counter: ProgressCounter = ProgressCounter(total: total, report: progress)
         var created: [String] = []
 
-        if let assPath: String = assPath {
-            try writeAss(path: assPath, subtitle: subtitle, language: language, counter: &counter)
-            created.append(assPath)
-        }
-        for job in srtJobs {
-            try writeSrt(path: job.path, lines: job.lines, includeRoles: job.includeRoles, language: language, counter: &counter)
-            created.append(job.path)
-        }
-        if let vttPath: String = vttPath {
-            try writeVtt(path: vttPath, subtitle: subtitle, language: language, counter: &counter)
-            created.append(vttPath)
-        }
-        if let docxPath: String = docxPath {
-            try DocxExporter.write(path: docxPath, subtitle: subtitle, language: language, counter: &counter)
-            created.append(docxPath)
+        // сбой на третьем файле из четырёх не отменяет первых двух: они уже на диске,
+        // и пользователь должен узнать про них, а не разбирать папку вручную
+        do {
+            if let assPath: String = assPath {
+                try writeAss(path: assPath, subtitle: subtitle, language: language, counter: &counter)
+                created.append(assPath)
+            }
+            for job in srtJobs {
+                try writeSrt(path: job.path, lines: job.lines, includeRoles: job.includeRoles, language: language, counter: &counter)
+                created.append(job.path)
+            }
+            if let vttPath: String = vttPath {
+                try writeVtt(path: vttPath, subtitle: subtitle, language: language, counter: &counter)
+                created.append(vttPath)
+            }
+            if let docxPath: String = docxPath {
+                try DocxExporter.write(
+                    path: docxPath,
+                    subtitle: subtitle,
+                    digest: digest,
+                    language: language,
+                    counter: &counter,
+                    roleHighlights: settings.roleHighlights
+                )
+                created.append(docxPath)
+            }
+        } catch is CancellationError {
+            // отмену пользователь выбрал сам: она не ошибка и не нуждается в объяснении
+            throw CancellationError()
+        } catch {
+            throw created.isEmpty ? error : PartialExportError(created: created, cause: error)
         }
 
         return created
@@ -152,10 +177,15 @@ enum SubtitleExporter {
     }
 
     private static func writeAss(path: String, subtitle: ImportedSubtitle, language: AppLanguage, counter: inout ProgressCounter) throws {
-        var output: String = assHeader()
+        let script: AssScript? = subtitle.assScript
+        let declared: Set<String> = declaredStyleNames(script)
+        var output: String = assHeader(script: script)
         for line in subtitle.lines {
             try counter.step()
-            let style: String = escapeAssField(line.style.isEmpty ? "Default" : line.style)
+            // стиль пишется только тогда, когда он объявлен в заголовке этого же файла.
+            // иначе плеер получит ссылку в пустоту и молча подставит Default, не сказав об этом
+            let named: String = escapeAssField(line.style)
+            let style: String = declared.contains(named.lowercased()) ? named : "Default"
             let role: String = escapeAssField(line.displayRoles(language).joined(separator: TextTools.assRoleSeparator))
             output +=
                 "Dialogue: 0,\(TimeTools.formatAss(line.start)),\(TimeTools.formatAss(line.end)),\(style),\(role),0,0,0,,\(TextTools.escapeAssText(line.text))\n"
@@ -203,14 +233,72 @@ enum SubtitleExporter {
         try output.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
-    private static func assHeader() -> String {
-        """
-        [Script Info]
+    /// заголовок исходного файла, если он был: разрешение кадра и определения стилей
+    /// принадлежат ему, а не нам. своим заголовком подменяется только отсутствующий
+    private static func assHeader(script: AssScript?) -> String {
+        guard let script: AssScript = script else {
+            return defaultAssHeader
+        }
+        let info: String = script.scriptInfo.isEmpty ? defaultScriptInfo : script.scriptInfo.joined(separator: "\n")
+        let styles: String = script.styles.map(sanitizedStyleLine).joined(separator: "\n")
+        let section: String = script.stylesSection.isEmpty ? "[V4+ Styles]" : script.stylesSection
+        return """
+            [Script Info]
+            \(info)
+
+            \(section)
+            \(styles)
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+
+            """
+    }
+
+    /// имена стилей, объявленных заголовком, в нижнем регистре для сравнения
+    private static func declaredStyleNames(_ script: AssScript?) -> Set<String> {
+        guard let script: AssScript = script else {
+            return ["default"]
+        }
+        let names: [String] = script.styles.compactMap { line in
+            guard line.range(of: "Style:", options: [.caseInsensitive, .anchored]) != nil else {
+                return nil
+            }
+            let payload: String = String(line.dropFirst("Style:".count))
+            guard let name: Substring = payload.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).first else {
+                return nil
+            }
+            return escapeAssField(String(name).trimmingCharacters(in: .whitespaces)).lowercased()
+        }
+        return Set(names + ["default"])
+    }
+
+    /// имя стиля в определении чистится ровно так же, как в строке Dialogue:
+    /// иначе после чистки одно перестаёт совпадать с другим
+    private static func sanitizedStyleLine(_ line: String) -> String {
+        guard line.range(of: "Style:", options: [.caseInsensitive, .anchored]) != nil else {
+            return line
+        }
+        let payload: String = String(line.dropFirst("Style:".count))
+        let parts: [Substring] = payload.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else {
+            return line
+        }
+        let name: String = escapeAssField(String(parts[0]).trimmingCharacters(in: .whitespaces))
+        return "Style: \(name),\(parts[1])"
+    }
+
+    private static let defaultScriptInfo: String = """
         ScriptType: v4.00+
         Collisions: Normal
         PlayResX: 1920
         PlayResY: 1080
         Timer: 100.0000
+        """
+
+    private static let defaultAssHeader: String = """
+        [Script Info]
+        \(defaultScriptInfo)
 
         [V4+ Styles]
         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -220,5 +308,4 @@ enum SubtitleExporter {
         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         """
-    }
 }

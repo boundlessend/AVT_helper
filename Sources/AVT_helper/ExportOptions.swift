@@ -17,6 +17,9 @@ final class ExportOptions: ObservableObject {
         static let outputFolder: String = "outputFolder"
     }
 
+    /// путь папки выгрузки хранится как обычная строка, потому что программа не в песочнице.
+    /// если она когда-нибудь туда переедет, одного пути станет мало: понадобится
+    /// security-scoped bookmark, иначе после перезапуска доступа к папке не будет
     private let defaults: UserDefaults
 
     @Published var ass: Bool { didSet { defaults.set(ass, forKey: Key.ass) } }
@@ -56,7 +59,7 @@ final class ExportOptions: ObservableObject {
         ass || srt || vtt || docx
     }
 
-    func settings(selectedRoles: Set<String>) -> ExportSettings {
+    func settings(selectedRoles: Set<String>, roleHighlights: [String: WordHighlightColor]) -> ExportSettings {
         ExportSettings(
             exportAss: ass,
             exportSrt: srt,
@@ -65,7 +68,8 @@ final class ExportOptions: ObservableObject {
             srtFullWithRoles: srtFullWithRoles,
             srtSeparateFiles: srtSeparateFiles,
             srtSeparateWithRoles: srtSeparateWithRoles,
-            selectedRoles: selectedRoles
+            selectedRoles: selectedRoles,
+            roleHighlights: roleHighlights
         )
     }
 }

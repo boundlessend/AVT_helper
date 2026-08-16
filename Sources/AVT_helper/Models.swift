@@ -1,11 +1,10 @@
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case ru
     case en
-
-    /// ключ хранения выбранного языка в UserDefaults / @AppStorage
-    static let storageKey: String = "appLanguage"
 
     var id: String { rawValue }
 
@@ -18,44 +17,125 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    /// язык для первого запуска: берётся из системных предпочтений, всё нерусское считается английским
+    /// язык, который выбрала система из локализаций приложения: он же язык меню, панелей и алертов,
+    /// поэтому интерфейс обязан следовать за ним, а не за своим представлением о системных настройках
     static var systemDefault: AppLanguage {
-        let preferred: String = Locale.preferredLanguages.first ?? "ru"
-        return preferred.hasPrefix("ru") ? .ru : .en
+        let preferred: [String] = Bundle.main.preferredLocalizations + Locale.preferredLanguages
+        guard let first: String = preferred.first else {
+            return .en
+        }
+        return first.hasPrefix("ru") ? .ru : .en
     }
 
-    /// разбирает сырое значение из настроек, падая в русский по умолчанию
+    /// разбирает сырое значение из настроек; всё неизвестное означает «как в системе»
     static func resolve(_ raw: String?) -> AppLanguage {
-        guard let raw: String = raw, let language: AppLanguage = AppLanguage(rawValue: raw) else {
-            return .ru
+        LanguagePreference.resolve(raw).language
+    }
+}
+
+/// выбор языка в настройках. системные меню, панель открытия файла и кнопки алертов рисует AppKit,
+/// и он читает AppleLanguages домена приложения, поэтому выбор записывается туда же:
+/// иначе половина окна остаётся на языке системы
+enum LanguagePreference: String, CaseIterable, Identifiable {
+    case system
+    case ru
+    case en
+
+    /// ключ хранения выбранного языка в UserDefaults / @AppStorage
+    static let storageKey: String = "appLanguage"
+    /// ключ, по которому AppKit выбирает локализацию бандла
+    static let appleLanguagesKey: String = "AppleLanguages"
+    /// что мы записали в него в прошлый раз. читать сам AppleLanguages для сравнения нельзя:
+    /// при отсутствии значения в домене программы UserDefaults отдаёт общесистемное,
+    /// и «как в системе» вечно выглядело бы как несохранённая перемена
+    private static let appliedKey: String = "appliedAppleLanguages"
+
+    var id: String { rawValue }
+
+    static func resolve(_ raw: String?) -> LanguagePreference {
+        guard let raw: String = raw, let preference: LanguagePreference = LanguagePreference(rawValue: raw) else {
+            return .system
         }
-        return language
+        return preference
+    }
+
+    var language: AppLanguage {
+        switch self {
+        case .system:
+            return AppLanguage.systemDefault
+        case .ru:
+            return .ru
+        case .en:
+            return .en
+        }
+    }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .system:
+            return L.text("settings.language.system", language)
+        case .ru:
+            return AppLanguage.ru.title
+        case .en:
+            return AppLanguage.en.title
+        }
+    }
+
+    /// значение AppleLanguages для этого выбора; nil означает, что ключ надо убрать и отдать выбор системе
+    var appleLanguages: [String]? {
+        switch self {
+        case .system:
+            return nil
+        case .ru:
+            return ["ru"]
+        case .en:
+            return ["en"]
+        }
+    }
+
+    /// правда ли, что после перезапуска язык интерфейса изменится: только это стоит перезапуска
+    func needsRelaunch(_ defaults: UserDefaults = .standard) -> Bool {
+        defaults.stringArray(forKey: Self.appliedKey) != appleLanguages
+    }
+
+    func apply(_ defaults: UserDefaults = .standard) {
+        guard let languages: [String] = appleLanguages else {
+            defaults.removeObject(forKey: Self.appleLanguagesKey)
+            defaults.removeObject(forKey: Self.appliedKey)
+            return
+        }
+        defaults.set(languages, forKey: Self.appleLanguagesKey)
+        defaults.set(languages, forKey: Self.appliedKey)
+    }
+}
+
+/// «Открыть недавние» ведёт NSDocumentController: он следит за переименованиями файлов,
+/// рисует значки и переживает переустановку, чего свой список в UserDefaults не умеет
+@MainActor
+final class RecentFiles: ObservableObject {
+    static let shared: RecentFiles = RecentFiles()
+
+    @Published private(set) var urls: [URL] = NSDocumentController.shared.recentDocumentURLs
+
+    private init() {}
+
+    func remember(_ url: URL) {
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        urls = NSDocumentController.shared.recentDocumentURLs
+    }
+
+    func clear() {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        urls = NSDocumentController.shared.recentDocumentURLs
     }
 }
 
 enum AppLimits {
     /// максимальный размер импортируемого файла субтитров
     static let maxSubtitleFileBytes: UInt64 = 50 * 1024 * 1024
-}
-
-/// список недавно открытых файлов для меню; хранится строками через перевод строки
-enum RecentFiles {
-    static let storageKey: String = "recentFiles"
-    private static let limit: Int = 8
-
-    /// пути, которые ещё существуют: удалённый файл в меню только раздражает
-    static func parse(_ raw: String) -> [String] {
-        raw
-            .components(separatedBy: "\n")
-            .filter { path in !path.isEmpty && FileManager.default.fileExists(atPath: path) }
-    }
-
-    /// новый путь встаёт первым, повтор поднимается наверх, хвост за пределами лимита отбрасывается
-    static func adding(_ path: String, to raw: String) -> String {
-        ([path] + parse(raw).filter { current in current != path })
-            .prefix(limit)
-            .joined(separator: "\n")
-    }
+    /// запас имени файла в байтах: 255 это предел файловой системы, остальное уходит
+    /// на суффикс различения и расширение
+    static let maxFileNameBytes: Int = 200
 }
 
 enum OutputFolder {
@@ -74,8 +154,10 @@ enum Roles {
         L.text("role.unassigned", language)
     }
 
-    /// проверяет, что имя совпадает с меткой нераспознанной роли на любом из языков
-    static func isUnassigned(_ name: String) -> Bool {
+    /// правда ли, что поле Name пришло из нашего же экспорта, где нераспознанная роль
+    /// записана меткой. проверка нужна только импорту ASS: без неё круг через программу
+    /// превращает отсутствие роли в роль с именем «Не назначено»
+    static func isOwnPlaceholder(_ name: String) -> Bool {
         AppLanguage.allCases.contains { language in
             name.caseInsensitiveCompare(L.text("role.unassigned", language)) == .orderedSame
         }
@@ -83,6 +165,11 @@ enum Roles {
 }
 
 enum AppInfo {
+    /// строка копирайта из Info.plist: в окне «О программе» она обязана совпадать с бандлом
+    static var copyright: String {
+        Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String ?? ""
+    }
+
     /// версия релиза: она же сравнивается с версией последнего релиза на GitHub
     static var shortVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
@@ -93,6 +180,23 @@ enum AppInfo {
         let build: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
         let stage: String = Bundle.main.infoDictionary?["AVTBuildStage"] as? String ?? "dev"
         return stage == "release" ? build : "\(build), \(stage)"
+    }
+}
+
+/// что программа берётся читать. один список на панель открытия, на перетаскивание
+/// и на объявление типов документов в Info.plist
+enum SubtitleFormats {
+    static let extensions: [String] = ["ass", "ssa", "srt", "vtt", "srp"]
+
+    static let contentTypes: [UTType] = extensions.compactMap { ext in UTType(filenameExtension: ext) }
+
+    static func accepts(_ url: URL) -> Bool {
+        extensions.contains(url.pathExtension.lowercased())
+    }
+
+    /// имя без разбора URL: перетаскивание сообщает его до того, как выдаст сам файл
+    static func accepts(name: String) -> Bool {
+        extensions.contains((name as NSString).pathExtension.lowercased())
     }
 }
 
@@ -152,11 +256,38 @@ struct SubtitleLine: Identifiable, Hashable, Sendable {
     }
 }
 
+/// заголовочные блоки исходного ASS, сохранённые дословно: без них экспорт ссылался бы
+/// на стили, которых в файле нет, и плеер молча заменял бы их на Default
+struct AssScript: Sendable {
+    /// строки блока [Script Info] без самого заголовка
+    let scriptInfo: [String]
+    /// строки блока стилей без заголовка, включая строку Format
+    let styles: [String]
+    /// имя блока стилей: у SSA это [V4 Styles], у ASS [V4+ Styles]
+    let stylesSection: String
+}
+
 struct ImportedSubtitle: Sendable {
     let baseName: String
     let sourcePath: String
     let sourceType: SubtitleSourceType
     let lines: [SubtitleLine]
+    /// заголовок исходного ASS, если файл им был
+    let assScript: AssScript?
+
+    init(
+        baseName: String,
+        sourcePath: String,
+        sourceType: SubtitleSourceType,
+        lines: [SubtitleLine],
+        assScript: AssScript? = nil
+    ) {
+        self.baseName = baseName
+        self.sourcePath = sourcePath
+        self.sourceType = sourceType
+        self.lines = lines
+        self.assScript = assScript
+    }
 
     /// уникальные роли файла в алфавитном порядке, без учёта регистра
     func allRoles(_ language: AppLanguage) -> [String] {
@@ -180,14 +311,18 @@ struct SubtitleDigest: Sendable {
     let counts: [String: Int]
     let lineCount: Int
     let duration: TimeInterval
+    /// имя, под которым в списке ролей стоят реплики без роли; nil означает, что таких реплик нет.
+    /// это подставленная метка, а не роль из файла, поэтому цвет и голос ей не полагаются
+    let placeholder: String?
 
-    static let empty: SubtitleDigest = SubtitleDigest(roles: [], counts: [:], lineCount: 0, duration: 0)
+    static let empty: SubtitleDigest = SubtitleDigest(roles: [], counts: [:], lineCount: 0, duration: 0, placeholder: nil)
 
-    init(roles: [String], counts: [String: Int], lineCount: Int, duration: TimeInterval) {
+    init(roles: [String], counts: [String: Int], lineCount: Int, duration: TimeInterval, placeholder: String? = nil) {
         self.roles = roles
         self.counts = counts
         self.lineCount = lineCount
         self.duration = duration
+        self.placeholder = placeholder
     }
 
     init(subtitle: ImportedSubtitle, language: AppLanguage) {
@@ -199,6 +334,7 @@ struct SubtitleDigest: Sendable {
         }
         lineCount = subtitle.lines.count
         duration = subtitle.lines.map { line in line.end }.max() ?? 0
+        placeholder = subtitle.lines.contains { line in line.roles.isEmpty } ? Roles.unassigned(language) : nil
     }
 
     /// доля реплик роли от всего файла: она же длина полоски в списке ролей
@@ -216,9 +352,27 @@ struct ExportSettings: Sendable {
     let srtSeparateFiles: Bool
     let srtSeparateWithRoles: Bool
     let selectedRoles: Set<String>
+    /// цвет маркера каждой роли: тот же, что в окне, поэтому лист и документ совпадают
+    let roleHighlights: [String: WordHighlightColor]
+
+    /// те же настройки для другого файла очереди: отметки и цвета принадлежат показанному файлу,
+    /// а у соседней серии роли свои
+    func forOtherFile(roles: Set<String>, highlights: [String: WordHighlightColor]) -> ExportSettings {
+        ExportSettings(
+            exportAss: exportAss,
+            exportSrt: exportSrt,
+            exportVtt: exportVtt,
+            exportDocx: exportDocx,
+            srtFullWithRoles: srtFullWithRoles,
+            srtSeparateFiles: srtSeparateFiles,
+            srtSeparateWithRoles: srtSeparateWithRoles,
+            selectedRoles: roles,
+            roleHighlights: highlights
+        )
+    }
 }
 
-enum VoiceGender: String, CaseIterable, Identifiable, Sendable {
+enum VoiceGender: String, CaseIterable, Identifiable, Sendable, Codable {
     case male
     case female
 
@@ -252,7 +406,7 @@ enum VoiceGender: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// rawValue совпадает со значением w:highlight в формате Word
-enum WordHighlightColor: String, CaseIterable, Identifiable, Sendable {
+enum WordHighlightColor: String, CaseIterable, Identifiable, Sendable, Codable {
     case yellow
     case green
     case cyan
@@ -303,7 +457,7 @@ enum WordHighlightColor: String, CaseIterable, Identifiable, Sendable {
 
 }
 
-struct VoiceConfig: Identifiable, Sendable {
+struct VoiceConfig: Identifiable, Sendable, Codable {
     let id: Int
     var gender: VoiceGender
     var color: WordHighlightColor
