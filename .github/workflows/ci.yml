@@ -21,6 +21,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check changelog section
+        run: |
+          if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            echo "CHANGELOG.md has no '## [Unreleased]' section; the release workflow renames it into the tag heading" >&2
+            exit 1
+          fi
+
+      - name: Check the tests named in AGENTS.md
+        run: |
+          for name in $(grep -oE '\btest[A-Z][A-Za-z0-9_]*' AGENTS.md | sort -u); do
+            if ! grep -qE "func ${name}\(" Tests/AVT_helperTests/*.swift; then
+              echo "AGENTS.md names a test that no longer exists: ${name}" >&2
+              exit 1
+            fi
+          done
+
       - name: Swift version
         run: swift --version
 
@@ -39,8 +55,8 @@ jobs:
       - name: Test
         run: swift test
 
-      - name: Build app bundle
-        run: ./scripts/build_app.sh
+      - name: Build app bundle and DMG
+        run: ./scripts/build_dmg.sh
 
       - name: Validate Info.plist
         run: plutil -lint .build/AVT_helper.app/Contents/Info.plist
