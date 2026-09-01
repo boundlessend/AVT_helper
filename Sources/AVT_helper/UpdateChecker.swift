@@ -7,31 +7,62 @@ enum UpdateChecker {
         let pageUrl: URL
     }
 
+    /// ответ на условный запрос: сервер либо присылает релиз, либо подтверждает, что он не менялся
+    enum FetchResult: Sendable {
+        case release(ReleaseInfo, etag: String?)
+        case notModified
+    }
+
     private static let latestReleaseApi: String = "https://api.github.com/repos/boundlessend/AVT_helper/releases/latest"
 
-    /// запрашивает последний опубликованный релиз и возвращает его версию и страницу загрузки
-    static func fetchLatest() async throws -> ReleaseInfo {
+    /// запрашивает последний опубликованный релиз и возвращает его версию и страницу загрузки.
+    /// etag прошлого ответа бережёт лимит в 60 запросов на адрес: на неизменившийся релиз GitHub отвечает 304 без тела
+    static func fetchLatest(etag: String?) async throws -> FetchResult {
         guard let url: URL = URL(string: latestReleaseApi) else {
             throw UpdateError.invalidResponse
         }
-        var request: URLRequest = URLRequest(url: url)
+        var request: URLRequest = URLRequest(url: url, timeoutInterval: 15)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        request.setValue("AVT_helper/\(AppInfo.shortVersion) (macOS)", forHTTPHeaderField: "User-Agent")
+        if let etag: String = etag {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
         let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
         guard let http: HTTPURLResponse = response as? HTTPURLResponse else {
             throw UpdateError.invalidResponse
         }
-        // GitHub отдаёт 403 или 429 при исчерпании лимита запросов; счётчик остатка лежит в заголовке
-        if http.statusCode == 403 || http.statusCode == 429, http.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" {
+        if http.statusCode == 304 {
+            return .notModified
+        }
+        let remaining: String? = http.value(forHTTPHeaderField: "x-ratelimit-remaining")
+        let retryAfter: String? = http.value(forHTTPHeaderField: "retry-after")
+        // основной лимит отдаёт 403 или 429 со счётчиком остатка, вторичный - без счётчика, зато с retry-after
+        if http.statusCode == 403 || http.statusCode == 429, remaining == "0" || retryAfter != nil {
             throw UpdateError.rateLimited
         }
         guard http.statusCode == 200 else {
             throw UpdateError.badStatus(http.statusCode)
         }
-        let release: LatestRelease = try JSONDecoder().decode(LatestRelease.self, from: data)
-        guard let pageUrl: URL = URL(string: release.htmlUrl) else {
+        let decoder: JSONDecoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let release: LatestRelease = try decoder.decode(LatestRelease.self, from: data)
+        let pageUrl: URL = try releasePageUrl(release.htmlUrl)
+        let info: ReleaseInfo = ReleaseInfo(version: normalizeTag(release.tagName), pageUrl: pageUrl)
+        return .release(info, etag: http.value(forHTTPHeaderField: "Etag"))
+    }
+
+    /// адрес приходит из сети, а NSWorkspace открывает любую схему, включая file:// и чужие зарегистрированные,
+    /// поэтому наружу уходит только https на github.com или его поддомен
+    private static func releasePageUrl(_ raw: String) throws -> URL {
+        guard let url: URL = URL(string: raw),
+            url.scheme?.lowercased() == "https",
+            let host: String = url.host()?.lowercased(),
+            host == "github.com" || host.hasSuffix(".github.com")
+        else {
             throw UpdateError.invalidResponse
         }
-        return ReleaseInfo(version: normalizeTag(release.tagName), pageUrl: pageUrl)
+        return url
     }
 
     /// убирает префикс "v." или "v" из имени тега: "v.1.6.5" -> "1.6.5"
@@ -62,11 +93,6 @@ enum UpdateChecker {
     private struct LatestRelease: Decodable {
         let tagName: String
         let htmlUrl: String
-
-        enum CodingKeys: String, CodingKey {
-            case tagName = "tag_name"
-            case htmlUrl = "html_url"
-        }
     }
 }
 
@@ -81,10 +107,17 @@ final class UpdateController: ObservableObject {
     private enum Key {
         static let automatic: String = "checkUpdatesAutomatically"
         static let lastCheck: String = "lastUpdateCheck"
+        static let lastCheckFailed: String = "lastUpdateCheckFailed"
+        static let etag: String = "lastUpdateEtag"
+        static let knownVersion: String = "lastUpdateKnownVersion"
+        static let knownPage: String = "lastUpdateKnownPage"
     }
 
     /// неделя: программой пользуются каждый день, а релизы выходят реже
     private static let interval: TimeInterval = 7 * 24 * 3600
+
+    /// час после неудачи: иначе единственный обрыв сети отодвигает следующую попытку на неделю
+    private static let retryInterval: TimeInterval = 3600
 
     @Published private(set) var available: UpdateChecker.ReleaseInfo?
     @Published private(set) var isChecking: Bool = false
@@ -105,12 +138,40 @@ final class UpdateController: ObservableObject {
         set { defaults.set(newValue, forKey: Key.lastCheck) }
     }
 
+    private var lastCheckFailed: Bool {
+        get { defaults.bool(forKey: Key.lastCheckFailed) }
+        set { defaults.set(newValue, forKey: Key.lastCheckFailed) }
+    }
+
+    /// разобранный ответ прошлой проверки: на 304 сервер тела не присылает, а решать о новизне всё равно надо
+    private var known: (etag: String, release: UpdateChecker.ReleaseInfo)? {
+        guard let etag: String = defaults.string(forKey: Key.etag),
+            let version: String = defaults.string(forKey: Key.knownVersion),
+            let page: String = defaults.string(forKey: Key.knownPage),
+            let pageUrl: URL = URL(string: page)
+        else {
+            return nil
+        }
+        return (etag, UpdateChecker.ReleaseInfo(version: version, pageUrl: pageUrl))
+    }
+
+    private func remember(etag: String?, release: UpdateChecker.ReleaseInfo) {
+        if let etag: String = etag {
+            defaults.set(etag, forKey: Key.etag)
+        } else {
+            defaults.removeObject(forKey: Key.etag)
+        }
+        defaults.set(release.version, forKey: Key.knownVersion)
+        defaults.set(release.pageUrl.absoluteString, forKey: Key.knownPage)
+    }
+
     /// фоновая проверка при запуске: молчит, если срок не вышел или её выключили
     func checkIfDue(language: AppLanguage) async {
         guard automatic else {
             return
         }
-        if let last: Date = lastCheck, Date().timeIntervalSince(last) < Self.interval {
+        let due: TimeInterval = lastCheckFailed ? Self.retryInterval : Self.interval
+        if let last: Date = lastCheck, Date().timeIntervalSince(last) < due {
             return
         }
         await check(language: language, announceUpToDate: false)
@@ -124,9 +185,11 @@ final class UpdateController: ObservableObject {
     private func check(language: AppLanguage, announceUpToDate: Bool) async {
         isChecking = true
         message = ""
+        let previous: (etag: String, release: UpdateChecker.ReleaseInfo)? = known
         do {
-            let release: UpdateChecker.ReleaseInfo = try await UpdateChecker.fetchLatest()
+            let release: UpdateChecker.ReleaseInfo = try await fetched(previous: previous)
             lastCheck = Date()
+            lastCheckFailed = false
             if UpdateChecker.isNewer(release.version, than: AppInfo.shortVersion) {
                 available = release
                 message = L.format("update.available", language, ["v": release.version])
@@ -135,10 +198,27 @@ final class UpdateController: ObservableObject {
                 message = announceUpToDate ? L.text("update.latest", language) : ""
             }
         } catch {
+            // время неудачи тоже помечается, иначе в офлайне программа ходит в сеть при каждом запуске
+            lastCheck = Date()
+            lastCheckFailed = true
             available = nil
             message = announceUpToDate ? L.describe(error, language) : ""
         }
         isChecking = false
+    }
+
+    private func fetched(previous: (etag: String, release: UpdateChecker.ReleaseInfo)?) async throws -> UpdateChecker.ReleaseInfo {
+        switch try await UpdateChecker.fetchLatest(etag: previous?.etag) {
+        case .release(let release, let etag):
+            remember(etag: etag, release: release)
+            return release
+        case .notModified:
+            // 304 приходит только на запрос с etag, а etag хранится вместе с разобранным ответом
+            guard let release: UpdateChecker.ReleaseInfo = previous?.release else {
+                throw UpdateError.invalidResponse
+            }
+            return release
+        }
     }
 }
 
