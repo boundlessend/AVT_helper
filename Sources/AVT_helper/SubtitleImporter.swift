@@ -7,23 +7,23 @@ enum SubtitleImporter {
         let sourceType: SubtitleSourceType = try detect(path: path)
         try validateFile(url: url, language: language)
         let text: String = try readText(url: url, language: language)
-        let lines: [SubtitleLine]
+        let parsed: ParsedLines
         var script: AssScript?
 
         switch sourceType {
         case .ass, .ssa:
             let document: AssDocument = try importAss(text: text, language: language, progress: progress)
-            lines = document.lines
+            parsed = document.parsed
             script = document.script
         case .srt:
-            lines = try importSrt(text: text, progress: progress)
+            parsed = try importSrt(text: text, progress: progress)
         case .vtt:
-            lines = try importVtt(text: text, progress: progress)
+            parsed = try importVtt(text: text, progress: progress)
         case .srp:
-            lines = try importSrp(text: text, language: language, progress: progress)
+            parsed = try importSrp(text: text, language: language, progress: progress)
         }
 
-        if lines.isEmpty {
+        if parsed.lines.isEmpty {
             throw SubtitleError.importFailed(L.text("error.noLines", language))
         }
 
@@ -31,8 +31,9 @@ enum SubtitleImporter {
             baseName: url.deletingPathExtension().lastPathComponent,
             sourcePath: url.standardizedFileURL.path,
             sourceType: sourceType,
-            lines: orderedByTime(canonicalizedRoles(lines)),
-            assScript: script
+            lines: orderedByTime(canonicalizedRoles(parsed.lines)),
+            assScript: script,
+            skippedBlocks: parsed.skipped
         )
     }
 
@@ -65,8 +66,8 @@ enum SubtitleImporter {
                 L.format(
                     "error.fileTooLarge", language,
                     [
-                        "size": L.fileSize(fileSize),
-                        "max": L.fileSize(AppLimits.maxSubtitleFileBytes),
+                        "size": L.fileSize(fileSize, language),
+                        "max": L.fileSize(AppLimits.maxSubtitleFileBytes, language),
                     ]))
         }
     }
@@ -173,9 +174,16 @@ enum SubtitleImporter {
         return String.Encoding(rawValue: raw)
     }()
 
+    /// разобранные реплики вместе с числом блоков, которые разобрать не удалось:
+    /// молчаливая потеря части файла выглядит для пользователя как файл, где этих реплик и не было
+    struct ParsedLines {
+        let lines: [SubtitleLine]
+        let skipped: Int
+    }
+
     /// реплики файла вместе с его заголовком: заголовок нужен экспорту, чтобы стили не осиротели
     private struct AssDocument {
-        let lines: [SubtitleLine]
+        let parsed: ParsedLines
         let script: AssScript?
     }
 
@@ -195,6 +203,7 @@ enum SubtitleImporter {
         var stylesSection: String = ""
         var fields: [String] = defaultAssFields
         var lines: [SubtitleLine] = []
+        var skipped: Int = 0
 
         for rawLine in rawLines {
             try counter.step()
@@ -222,6 +231,8 @@ enum SubtitleImporter {
                 }
                 if let line: SubtitleLine = parseAssDialogue(trimmed, fields: fields) {
                     lines.append(line)
+                } else if trimmed.range(of: "Dialogue:", options: [.caseInsensitive, .anchored]) != nil {
+                    skipped += 1
                 }
             default:
                 continue
@@ -236,7 +247,7 @@ enum SubtitleImporter {
                 styles: styles,
                 stylesSection: stylesSection
             )
-        return AssDocument(lines: lines, script: script)
+        return AssDocument(parsed: ParsedLines(lines: lines, skipped: skipped), script: script)
     }
 
     private static func isAssFormatLine(_ line: String) -> Bool {
@@ -296,7 +307,11 @@ enum SubtitleImporter {
             text: TextTools.cleanAssText(value("text")),
             style: style,
             effect: effect,
-            sex: .unknown
+            sex: .unknown,
+            layer: Int(value("layer")) ?? 0,
+            marginL: Int(value("marginl")) ?? 0,
+            marginR: Int(value("marginr")) ?? 0,
+            marginV: Int(value("marginv")) ?? 0
         )
     }
 
@@ -330,32 +345,41 @@ enum SubtitleImporter {
         return TimedBlock(start: start, end: end, rawText: rawText)
     }
 
-    private static func importSrt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+    private static func importSrt(text: String, progress: @escaping ProgressHandler) throws -> ParsedLines {
         let blocks: [String] = normalizedBlocks(text: text)
         var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
-        return try blocks.compactMap { block in
+        var lines: [SubtitleLine] = []
+        var skipped: Int = 0
+        for block in blocks {
             try counter.step()
             guard let parsed: TimedBlock = parseTimedBlock(block, parseTime: TimeTools.parseSrt, endTime: { part in part }) else {
-                return nil
+                skipped += 1
+                continue
             }
-            return buildLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText)
+            lines.append(buildLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText))
         }
+        return ParsedLines(lines: lines, skipped: skipped)
     }
 
-    private static func importVtt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+    private static func importVtt(text: String, progress: @escaping ProgressHandler) throws -> ParsedLines {
         let withoutHeader: String = text.replacingOccurrences(of: "\u{FEFF}", with: "")
         let blocks: [String] = normalizedBlocks(text: withoutHeader)
         var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
-        return try blocks.compactMap { block in
+        var lines: [SubtitleLine] = []
+        var skipped: Int = 0
+        for block in blocks {
             try counter.step()
+            // служебный блок это не потерянная реплика, поэтому в счёт пропусков он не идёт
             if isVttMetadataBlock(block) {
-                return nil
+                continue
             }
             guard let parsed: TimedBlock = parseTimedBlock(block, parseTime: TimeTools.parseVtt, endTime: vttEndTime) else {
-                return nil
+                skipped += 1
+                continue
             }
-            return buildVttLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText)
+            lines.append(buildVttLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText))
         }
+        return ParsedLines(lines: lines, skipped: skipped)
     }
 
     /// в VTT за конечным таймкодом идут cue settings, отделённые пробелом: времени принадлежит только первое слово
@@ -373,7 +397,7 @@ enum SubtitleImporter {
         }
     }
 
-    private static func importSrp(text: String, language: AppLanguage, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
+    private static func importSrp(text: String, language: AppLanguage, progress: @escaping ProgressHandler) throws -> ParsedLines {
         // внутренние сущности разворачиваются уже в конструкторе XMLDocument, поэтому DOCTYPE ищется в тексте:
         // 581 байт бомбы иначе успевают развернуться в гигабайт до любой проверки
         if declaresDoctype(text) {
@@ -388,7 +412,9 @@ enum SubtitleImporter {
         }
         let nodes: [XMLNode] = try document.nodes(forXPath: "//DocumentElement")
         var counter: ProgressCounter = ProgressCounter(total: nodes.count, report: progress)
-        return try nodes.compactMap { node in
+        var lines: [SubtitleLine] = []
+        var skipped: Int = 0
+        for node in nodes {
             try counter.step()
             let roles: [String] = TextTools.normalizedRoles([childText(node: node, name: "Character")])
             let sex: SourceSex = SourceSex.parse(childText(node: node, name: "Sex"))
@@ -402,10 +428,12 @@ enum SubtitleImporter {
                 let end: TimeInterval = flexibleTime(childText(node: node, name: "EndTime")),
                 end >= start
             else {
-                return nil
+                skipped += 1
+                continue
             }
-            return SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: rawText, style: "", effect: "", sex: sex)
+            lines.append(SubtitleLine(id: UUID(), start: start, end: end, roles: roles, text: rawText, style: "", effect: "", sex: sex))
         }
+        return ParsedLines(lines: lines, skipped: skipped)
     }
 
     /// сводит написания одной роли к первому встреченному: иначе «Анна» и «АННА» живут как две роли
@@ -418,16 +446,7 @@ enum SubtitleImporter {
             }
         }
         return lines.map { line in
-            SubtitleLine(
-                id: line.id,
-                start: line.start,
-                end: line.end,
-                roles: TextTools.normalizedRoles(line.roles.map { role in canonical[role.lowercased()] ?? role }),
-                text: line.text,
-                style: line.style,
-                effect: line.effect,
-                sex: line.sex
-            )
+            line.withRoles(TextTools.normalizedRoles(line.roles.map { role in canonical[role.lowercased()] ?? role }))
         }
     }
 

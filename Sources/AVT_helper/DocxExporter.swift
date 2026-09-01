@@ -14,7 +14,7 @@ enum DocxExporter {
         progress: @escaping ProgressHandler = { _ in }
     ) throws -> String {
         let name: String = TextTools.safeFileName("\(subtitle.baseName)\(fileSuffix)")
-        let outputPath: String = paths.reserve(folder: outputFolder, name: name, fileExtension: "docx")
+        let outputPath: String = try paths.reserve(folder: outputFolder, name: name, fileExtension: "docx")
         var counter: ProgressCounter = ProgressCounter(total: subtitle.lines.count, report: progress)
         try write(
             path: outputPath,
