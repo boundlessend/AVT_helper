@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -15,7 +15,7 @@ let package = Package(
         .executableTarget(
             name: "AVT_helper",
             resources: [.process("Resources")],
-            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(name: "AVT_helperTests", dependencies: ["AVT_helper"]),
     ]

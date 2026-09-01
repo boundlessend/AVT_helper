@@ -12,6 +12,14 @@ EXECUTABLE_PATH="${ROOT_DIR}/.build/release/${APP_NAME}"
 ICON_SOURCE="${ROOT_DIR}/Assets/AVT_helper_icon.png"
 ICONSET_DIR="${BUILD_DIR}/AppIcon.iconset"
 
+# граница платформы объявлена в Package.swift, и бандл не должен носить собственную копию числа
+MIN_MACOS_MAJOR="$(grep -oE '\.macOS\(\.v[0-9]+\)' "${ROOT_DIR}/Package.swift" | grep -oE '[0-9]+' | head -1)"
+if [ -z "${MIN_MACOS_MAJOR}" ]; then
+  echo "Package.swift has no .macOS(.vNN) platform line" >&2
+  exit 1
+fi
+MIN_MACOS="${MIN_MACOS_MAJOR}.0"
+
 RELEASE_VERSION="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v\.?//' || true)"
 RELEASE_VERSION="${RELEASE_VERSION:-0.0.0}"
 
@@ -79,9 +87,15 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>NSHumanReadableCopyright</key>
     <string>© ${COPYRIGHT_YEAR} @boundlessend. BSD 3-Clause.</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>${MIN_MACOS}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>AVT_helper saves the converted subtitle and DOCX files to the folder you choose, and the Desktop is the default one.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>AVT_helper reads the subtitle files you open and saves the converted files to the folder you choose.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>AVT_helper reads the subtitle files you open and saves the converted files to the folder you choose.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsSuddenTermination</key>
@@ -129,6 +143,23 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
+        <string>app.boundlessend.avt-helper.srt</string>
+        <key>UTTypeDescription</key>
+        <string>SubRip subtitles</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.plain-text</string>
+        </array>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>srt</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>UTTypeIdentifier</key>
         <string>app.boundlessend.avt-helper.srp</string>
         <key>UTTypeDescription</key>
         <string>SRP dubbing script</string>
@@ -158,6 +189,7 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
         <array>
           <string>org.aegisub.ass</string>
           <string>org.aegisub.ssa</string>
+          <string>app.boundlessend.avt-helper.srt</string>
           <string>cz.wz.zuggy.subrip</string>
           <string>org.w3.webvtt</string>
           <string>app.boundlessend.avt-helper.srp</string>
@@ -169,5 +201,9 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 PLIST
 
 codesign --force --sign - "${APP_DIR}"
+codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
+
+# ad-hoc подпись Gatekeeper отвергает всегда, поэтому вердикт только печатаем
+spctl --assess --type execute --verbose "${APP_DIR}" || true
 
 echo "Created ${APP_DIR}"

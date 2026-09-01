@@ -7,17 +7,25 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build macOS app
-    runs-on: macos-15
+    name: Build macOS app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -30,7 +38,14 @@ jobs:
 
       - name: Check the tests named in AGENTS.md
         run: |
-          for name in $(grep -oE '\btest[A-Z][A-Za-z0-9_]*' AGENTS.md | sort -u); do
+          # пустой grep не выполняет тело цикла и молча проходит, поэтому имена сначала считаем
+          names="$(grep -oE '\btest[A-Z][A-Za-z0-9_]*' AGENTS.md | sort -u || true)"
+          count="$(printf '%s' "${names}" | grep -c . || true)"
+          if [ "${count}" -lt 10 ]; then
+            echo "AGENTS.md names only ${count} tests; the table of invariants is gone and this guard checks nothing" >&2
+            exit 1
+          fi
+          for name in ${names}; do
             if ! grep -qE "func ${name}\(" Tests/AVT_helperTests/*.swift; then
               echo "AGENTS.md names a test that no longer exists: ${name}" >&2
               exit 1
@@ -41,13 +56,7 @@ jobs:
         run: swift --version
 
       - name: Lint (swift-format)
-        run: |
-          if swift format --version >/dev/null 2>&1; then
-            swift format lint --strict --recursive Sources Tests
-          else
-            brew install swift-format
-            swift-format lint --strict --recursive Sources Tests
-          fi
+        run: ./scripts/lint.sh
 
       - name: Build
         run: swift build -c release
@@ -56,13 +65,21 @@ jobs:
         run: swift test
 
       - name: Build app bundle and DMG
+        if: matrix.os == 'macos-15'
         run: ./scripts/build_dmg.sh
 
       - name: Validate Info.plist
+        if: matrix.os == 'macos-15'
         run: plutil -lint .build/AVT_helper.app/Contents/Info.plist
 
+      - name: Pack app bundle
+        if: matrix.os == 'macos-15'
+        # upload-artifact пакует каталог в zip без прав доступа, и распакованный бандл не запускается
+        run: ditto -c -k --keepParent .build/AVT_helper.app .build/AVT_helper.app.zip
+
       - name: Upload app artifact
-        uses: actions/upload-artifact@v7
+        if: matrix.os == 'macos-15'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: AVT_helper.app
-          path: .build/AVT_helper.app
+          name: AVT_helper-app
+          path: .build/AVT_helper.app.zip

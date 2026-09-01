@@ -4,5 +4,14 @@
   "lineLength": 140,
   "maximumBlankLines": 1,
   "respectsExistingLineBreaks": true,
-  "rules": {}
+  "rules": {
+    "AlwaysUseLowerCamelCase": true,
+    "TypeNamesShouldBeCapitalized": true,
+    "DoNotUseSemicolons": true,
+    "NoBlockComments": true,
+    "UseTripleSlashForDocumentationComments": true,
+    "OrderedImports": true,
+    "ReturnVoidInsteadOfEmptyTuple": true,
+    "IdentifiersMustBeASCII": true
+  }
 }
