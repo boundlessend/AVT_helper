@@ -7,6 +7,12 @@ enum ZipArchive {
         let data: Data
     }
 
+    /// время и дата MS-DOS для всех записей: 1980-01-01 00:00, начало шкалы формата.
+    /// нули в этих полях дают недопустимые месяц 0 и день 0, а часы машины лишили бы
+    /// сборку воспроизводимости
+    private static let dosTime: UInt16 = 0
+    private static let dosDate: UInt16 = 0x0021
+
     /// собирает zip-архив из набора файлов в памяти: deflate там, где он выигрывает, иначе store
     static func archive(entries: [Entry]) -> Data {
         var result: Data = Data()
@@ -27,8 +33,8 @@ enum ZipArchive {
             local.append(contentsOf: le16(20))
             local.append(contentsOf: le16(0))
             local.append(contentsOf: le16(method))
-            local.append(contentsOf: le16(0))
-            local.append(contentsOf: le16(0))
+            local.append(contentsOf: le16(dosTime))
+            local.append(contentsOf: le16(dosDate))
             local.append(contentsOf: le32(crc))
             local.append(contentsOf: le32(storedSize))
             local.append(contentsOf: le32(originalSize))
@@ -43,8 +49,8 @@ enum ZipArchive {
             central.append(contentsOf: le16(20))
             central.append(contentsOf: le16(0))
             central.append(contentsOf: le16(method))
-            central.append(contentsOf: le16(0))
-            central.append(contentsOf: le16(0))
+            central.append(contentsOf: le16(dosTime))
+            central.append(contentsOf: le16(dosDate))
             central.append(contentsOf: le32(crc))
             central.append(contentsOf: le32(storedSize))
             central.append(contentsOf: le32(originalSize))

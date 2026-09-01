@@ -47,6 +47,16 @@ struct ProgressCounter {
     /// отмечает выполненную единицу работы; бросает CancellationError, если операцию отменили
     mutating func step() throws {
         try Task.checkCancellation()
+        advance()
+    }
+
+    /// отмечает работу, отменять которую уже поздно: файл записан, и прерывание здесь
+    /// заставило бы вызывающего считать созданный файл несозданным
+    mutating func finish() {
+        advance()
+    }
+
+    private mutating func advance() {
         done += 1
         let percent: Int = done * 100 / total
         if percent != lastPercent {
