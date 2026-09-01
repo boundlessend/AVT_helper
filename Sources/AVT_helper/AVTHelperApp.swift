@@ -11,13 +11,16 @@ struct AVTHelperApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(id: MainWindow.identifier) {
+        // каждое окно единственное по смыслу, поэтому Window, а не WindowGroup: группа на каждый
+        // openWindow заводит ещё одну копию, а Window поднимает уже открытую.
+        // фильтр внешних событий остаётся на всех сценах: сцена без него забирает открытие файлов
+        // из Finder себе и выскакивает вместо главного окна, а десять серий подряд превращались бы
+        // в десять окон вместо одной очереди
+        Window("AVT_helper", id: MainWindow.identifier) {
             ContentView()
                 .frame(minWidth: 900, minHeight: 600)
         }
         .windowStyle(.titleBar)
-        // без этого macOS открывает по окну на каждый файл, выбранный в Finder,
-        // и десять серий превращаются в десять окон вместо одной очереди
         .handlesExternalEvents(matching: ["avt.main"])
         .commands {
             AppMenuCommands()
@@ -25,16 +28,13 @@ struct AVTHelperApp: App {
 
         // заголовки вспомогательных окон видны в меню «Окно», поэтому берутся из тех же
         // ресурсов, что и остальной интерфейс: строковый литерал остался бы английским навсегда
-        // вспомогательные окна объявлены группами, а не Window: сцена Window перехватывает
-        // открытие файлов из Finder, которое главное окно у себя отключило, и выскакивает
-        // вместо него. группа честно смотрит на условие и файлы не забирает
-        WindowGroup(L.text("about", language), id: "about") {
+        Window(L.text("about", language), id: "about") {
             AboutWindow()
         }
         .defaultSize(width: 420, height: 320)
         .handlesExternalEvents(matching: ["avt.about"])
 
-        WindowGroup(L.text("qa", language), id: "qa") {
+        Window(L.text("qa", language), id: "qa") {
             QAWindow()
         }
         .defaultSize(width: 540, height: 380)
@@ -48,6 +48,14 @@ struct AVTHelperApp: App {
 
 enum MainWindow {
     static let identifier: String = "main"
+}
+
+/// идёт ли прямо сейчас запись файлов. флаг общий на программу: выход обязан спросить
+/// подтверждение, а знает о работе не он, а тот, кто пишет. ProcessingModel выставляет его
+/// на время прогона очереди, лист разролёвки - на время записи DOCX
+@MainActor
+enum WorkGuard {
+    static var isBusy: Bool = false
 }
 
 extension Notification.Name {
@@ -70,6 +78,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// выход посреди записи обрывает файл на середине, поэтому во время работы он требует
+    /// подтверждения. это же спрашивается и при закрытии последнего окна: оно ведёт к выходу
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard WorkGuard.isBusy else {
+            return .terminateNow
+        }
+        let language: AppLanguage = AppLanguage.resolve(UserDefaults.standard.string(forKey: LanguagePreference.storageKey))
+        let alert: NSAlert = NSAlert()
+        alert.messageText = L.text("quit.busy.title", language)
+        // первой кнопкой продолжение работы: она же кнопка по умолчанию, и случайный Enter
+        // не обрывает запись
+        alert.addButton(withTitle: L.text("quit.busy.keepWorking", language))
+        alert.addButton(withTitle: L.text("quit.busy.quit", language))
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }
 
     /// файлы, открытые двойным кликом в Finder или перетащенные на иконку
@@ -115,7 +139,9 @@ struct AppMenuCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button(L.text("openSubtitles", language)) {
+            // у пунктов меню свои ключи: рядом стоят системные пункты в title case,
+            // а многоточие обещает диалог, который откроется по нажатию
+            Button(L.text("menu.openSubtitles", language)) {
                 NotificationCenter.default.post(name: .openSubtitleFiles, object: nil)
             }
             .keyboardShortcut("o")
@@ -143,7 +169,7 @@ struct AppMenuCommands: Commands {
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(actions?.start == nil)
 
-            Button(L.text("makeRoleAssignment", language)) {
+            Button(L.text("menu.makeRoleAssignment", language)) {
                 actions?.assign?()
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])

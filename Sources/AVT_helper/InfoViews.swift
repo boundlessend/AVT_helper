@@ -138,6 +138,9 @@ struct SettingsView: View {
     @Binding var preferenceRaw: String
     @ObservedObject private var updates: UpdateController = .shared
     @State private var showsRelaunch: Bool = false
+    /// почему новая копия не запустилась: без этого сообщения неудачный перезапуск
+    /// просто закрыл бы программу
+    @State private var relaunchError: String = ""
 
     private var preference: LanguagePreference {
         LanguagePreference.resolve(preferenceRaw)
@@ -156,9 +159,17 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text(L.text("settings.language.hint", language))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L.text("settings.language.hint", language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if !relaunchError.isEmpty {
+                        Text(relaunchError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                    }
+                }
             }
 
             Section {
@@ -187,12 +198,18 @@ struct SettingsView: View {
         }
     }
 
+    /// выход только после того, как новая копия действительно поднялась: иначе неудачный
+    /// запуск оставил бы пользователя вообще без программы
     private func relaunch() {
         let configuration: NSWorkspace.OpenConfiguration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, _ in
-            Task { @MainActor in
+        let currentLanguage: AppLanguage = language
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration)
                 NSApp.terminate(nil)
+            } catch {
+                relaunchError = L.format("settings.relaunch.failed", currentLanguage, ["e": error.localizedDescription])
             }
         }
     }

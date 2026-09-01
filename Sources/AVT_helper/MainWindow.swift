@@ -13,7 +13,12 @@ struct ContentView: View {
     @State private var showRoleAssignment: Bool = false
     @State private var showHistory: Bool = false
     @State private var isDropTargeted: Bool = false
+    @State private var showInputImporter: Bool = false
+    @State private var showOutputFolderImporter: Bool = false
     @State private var lastRun: ExportRun?
+    /// собственный номер окна: по нему выбирается единственный ответчик на .openSubtitleFiles
+    @State private var windowID: UUID = UUID()
+    @Environment(\.controlActiveState) private var windowActiveState
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)
@@ -67,8 +72,24 @@ struct ContentView: View {
             .navigationSubtitle(windowSubtitle)
             .focusedSceneValue(\.windowActions, menuActions)
             .onReceive(NotificationCenter.default.publisher(for: .openSubtitleFiles), perform: handleOpenRequest)
-            .onChange(of: appLanguageRaw) { _, _ in
+            .onAppear {
+                OpenRequestOwnership.add(windowID)
+                OpenRequestOwnership.setKey(windowID, isKey: windowActiveState == .key)
+            }
+            .onDisappear {
+                OpenRequestOwnership.remove(windowID)
+            }
+            .onChange(of: windowActiveState) { _, state in
+                OpenRequestOwnership.setKey(windowID, isKey: state == .key)
+            }
+            .onChange(of: appLanguageRaw) { previousRaw, _ in
                 model.refreshDigest(language: language)
+                transferPlaceholderSelection(previous: AppLanguage.resolve(previousRaw))
+            }
+            // отметки принадлежат ролям показанного файла: у соседней серии роли свои,
+            // и без пересборки раздельный экспорт SRT не нашёл бы ни одной отмеченной
+            .onChange(of: model.importedSubtitle?.sourcePath) { _, _ in
+                selectedRoles = Set(model.digest.roles)
             }
             .task {
                 await updates.checkIfDue(language: language)
@@ -76,17 +97,54 @@ struct ContentView: View {
             .alert(t("done"), isPresented: $showDoneAlert) {
                 Button(t("showInFinder")) {
                     revealCreatedFiles()
-                    completeProcessing()
                 }
-                Button(t("ok")) {
-                    completeProcessing()
-                }
+                // роль .cancel даёт алерту закрытие по Escape
+                Button(t("ok"), role: .cancel) {}
             } message: {
                 Text(createdFilesSummary)
+            }
+            // действия «после экспорта» привязаны к закрытию алерта, а не к его кнопкам:
+            // закрытый Escape алерт тоже означает, что пользователь дочитал итог
+            .onChange(of: showDoneAlert) { _, isShown in
+                if !isShown {
+                    completeProcessing()
+                }
+            }
+            .fileImporter(
+                isPresented: $showInputImporter,
+                allowedContentTypes: SubtitleFormats.contentTypes,
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    open(urls: urls)
+                case .failure(let error):
+                    model.log(L.describe(error, language))
+                }
+            }
+            .fileImporter(isPresented: $showOutputFolderImporter, allowedContentTypes: [.folder]) { result in
+                switch result {
+                case .success(let url):
+                    options.outputFolder = url.path
+                    model.log("\(t("outputFolderLog")): \(url.path)")
+                case .failure(let error):
+                    model.log(L.describe(error, language))
+                }
             }
             .sheet(isPresented: $showRoleAssignment) {
                 assignmentSheet
             }
+    }
+
+    /// переносит отметку нераспознанной роли на её новую метку: после смены языка в наборе
+    /// осталась бы строка прежнего языка, и отдельный SRT для реплик без роли перестал бы создаваться
+    private func transferPlaceholderSelection(previous: AppLanguage) {
+        let previousLabel: String = Roles.unassigned(previous)
+        guard selectedRoles.contains(previousLabel), let current: String = model.digest.placeholder else {
+            return
+        }
+        selectedRoles.remove(previousLabel)
+        selectedRoles.insert(current)
     }
 
     private var window: some View {
@@ -142,7 +200,9 @@ struct ContentView: View {
     }
 
     private func handleOpenRequest(_ notification: Notification) {
-        if model.isWorking {
+        // уведомление приходит во все главные окна сразу, поэтому отвечает только окно-владелец:
+        // иначе одно Cmd+O показало бы столько панелей выбора, сколько окон открыто
+        guard OpenRequestOwnership.isOwner(windowID) else {
             return
         }
         if let urls: [URL] = notification.object as? [URL] {
@@ -167,6 +227,12 @@ struct ContentView: View {
                 }
             )
             .frame(minWidth: 880, minHeight: 620)
+        } else {
+            // без разобранного файла листу нечего показывать, но пустой лист без кнопок
+            // не закрыть ничем: закрываем его сами, как только он поднялся
+            Color.clear
+                .frame(width: 1, height: 1)
+                .onAppear { showRoleAssignment = false }
         }
     }
 
@@ -210,7 +276,10 @@ struct ContentView: View {
             if let subtitle: ImportedSubtitle = model.importedSubtitle {
                 SubtitleSheetView(subtitle: subtitle, language: language, highlights: model.roleHighlights)
             } else {
+                // подпись зоны перетаскивания живёт на пустом состоянии: на монтажном листе
+                // она накрыла бы одним элементом тысячи строк
                 SheetEmptyView(language: language, isDropTargeted: isDropTargeted, onOpen: chooseInputFiles)
+                    .accessibilityLabel(t("inputFile"))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -221,33 +290,29 @@ struct ContentView: View {
                 onDrop: { urls in open(urls: urls) }
             )
         )
-        .accessibilityLabel(t("inputFile"))
     }
 
+    /// сезон открывают целиком: очередь всё равно обрабатывается одними настройками
     private func chooseInputFiles() {
-        let panel: NSOpenPanel = NSOpenPanel()
-        // сезон открывают целиком: очередь всё равно обрабатывается одними настройками
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = SubtitleFormats.contentTypes
-        if panel.runModal() == .OK {
-            open(urls: panel.urls)
+        if model.isWorking {
+            model.log(t("openWhileBusy"))
+            return
         }
+        showInputImporter = true
     }
 
     private func chooseOutputFolder() {
-        let panel: NSOpenPanel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        if panel.runModal() == .OK, let url: URL = panel.url {
-            options.outputFolder = url.path
-            model.log("\(t("outputFolderLog")): \(url.path)")
-        }
+        showOutputFolderImporter = true
     }
 
     /// ставит файлы в очередь; чужие расширения отсеиваются здесь, а не падают ошибкой импорта
     private func open(urls: [URL]) {
+        // сюда сходятся все пути открытия: меню, панель выбора и перетаскивание. импорт поверх
+        // работающего экспорта перебил бы отмену, поэтому занятость проверяется здесь, а не у каждого
+        if model.isWorking {
+            model.log(t("openWhileBusy"))
+            return
+        }
         let accepted: [URL] = urls.filter(SubtitleFormats.accepts)
         if accepted.isEmpty {
             model.log(t("dropUnsupported"))
@@ -258,7 +323,6 @@ struct ContentView: View {
         }
         Task {
             await model.enqueue(paths: accepted.map { url in url.path }, language: language)
-            selectedRoles = Set(model.digest.roles)
             for url in accepted {
                 recent.remember(url)
             }
@@ -320,6 +384,41 @@ struct ContentView: View {
         if options.closeAppAfter {
             NSApp.terminate(nil)
         }
+    }
+}
+
+// MARK: - кто отвечает за открытие файлов
+
+/// уведомление .openSubtitleFiles рассылается сразу всем главным окнам, поэтому одно из них
+/// назначается владельцем: ключевое окно, а когда ключевого нет (файл открыли из Finder, пока
+/// программа была в фоне) - самое раннее из живых. общий список нужен потому, что через SwiftUI
+/// окно не может узнать ни о соседях, ни о том, ключевое ли оно среди них
+@MainActor
+enum OpenRequestOwnership {
+    private static var order: [UUID] = []
+    private static var keyWindowID: UUID?
+
+    static func add(_ id: UUID) {
+        order.append(id)
+    }
+
+    static func remove(_ id: UUID) {
+        order.removeAll { item in item == id }
+        if keyWindowID == id {
+            keyWindowID = nil
+        }
+    }
+
+    static func setKey(_ id: UUID, isKey: Bool) {
+        if isKey {
+            keyWindowID = id
+        } else if keyWindowID == id {
+            keyWindowID = nil
+        }
+    }
+
+    static func isOwner(_ id: UUID) -> Bool {
+        (keyWindowID ?? order.first) == id
     }
 }
 
@@ -486,7 +585,9 @@ struct StatusBar: View {
                     .multilineTextAlignment(.leading)
             }
             .buttonStyle(.accessoryBar)
-            .help(L.text("history.hint", language))
+            // строка обрезана двумя строками, поэтому подсказка показывает сообщение целиком,
+            // и только пустой статус оставляет прежний рассказ про журнал
+            .help(model.status.isEmpty ? L.text("history.hint", language) : model.status)
             .popover(isPresented: $showHistory, arrowEdge: .top) {
                 HistoryPopover(history: model.history, language: language)
             }

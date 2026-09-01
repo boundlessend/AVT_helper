@@ -17,10 +17,22 @@ struct RoleAssignmentView: View {
     @State private var previewError: String = ""
     @State private var errorMessage: String = ""
     @State private var isWorking: Bool = false
+    /// запись DOCX: без ссылки на задачу кнопке «Отменить» нечего было бы отменять
+    @State private var exportTask: Task<String, Error>?
     @StateObject private var progress: ProgressBox = ProgressBox()
 
     private var hasDuplicateColors: Bool {
         Set(setup.voices.map { voice in voice.color }).count != setup.voices.count
+    }
+
+    /// роли без подставленной метки «нет роли»: голос и цвет ей не полагаются,
+    /// ровно как и в автоматической раскраске
+    private var namedRoles: [String] {
+        digest.roles.filter { role in role != digest.placeholder }
+    }
+
+    private var namedCounts: [String: Int] {
+        digest.counts.filter { role, _ in role != digest.placeholder }
     }
 
     private var previewHighlights: [String: WordHighlightColor] {
@@ -43,9 +55,12 @@ struct RoleAssignmentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             if roleSettings.isEmpty {
+                // пол ролей приносит только SRP: без подсказок весь каст пришёл бы мужским,
+                // поэтому он чередуется по порядку ролей, а кнопки «все мужские» и «все женские» это переопределяют
                 let hints: [String: VoiceGender] = roleGenderHints()
-                roleSettings = digest.roles.map { role in
-                    RoleGenderSetting(role: role, gender: hints[role] ?? .male)
+                roleSettings = namedRoles.enumerated().map { index, role in
+                    let byOrder: VoiceGender = index.isMultiple(of: 2) ? .male : .female
+                    return RoleGenderSetting(role: role, gender: hints[role] ?? (hints.isEmpty ? byOrder : .male))
                 }
             }
             refreshPreview()
@@ -204,11 +219,15 @@ struct RoleAssignmentView: View {
             if isWorking {
                 ProgressReadout(progress: progress)
             }
+            // одна и та же кнопка: пока идёт запись, «Отменить» отменяет её, а не закрывает лист
             Button(t("cancel")) {
-                dismiss()
+                if let work: Task<String, Error> = exportTask {
+                    work.cancel()
+                } else {
+                    dismiss()
+                }
             }
             .keyboardShortcut(.cancelAction)
-            .disabled(isWorking)
             Button(t("assignRoles")) {
                 assignRoles()
             }
@@ -230,7 +249,7 @@ struct RoleAssignmentView: View {
     private func refreshPreview() {
         do {
             preview = try RoleAssignmentService.assignRoles(
-                counts: digest.counts,
+                counts: namedCounts,
                 voices: setup.voices,
                 roleSettings: roleSettings,
                 language: language
@@ -278,50 +297,70 @@ struct RoleAssignmentView: View {
             errorMessage = t("hint.badOutputFolder")
             return
         }
-        isWorking = true
-        progress.reset()
-        errorMessage = ""
-
         let voices: [VoiceConfig] = setup.voices
         let exportSubtitle: ImportedSubtitle = subtitle
         let exportDigest: SubtitleDigest = digest
         let exportFolder: String = outputFolder
         let exportLanguage: AppLanguage = language
         let suffix: String = t("file.assignmentSuffix")
-        let settings: [RoleGenderSetting] = roleSettings
+        let result: RoleAssignmentResult
+        do {
+            result = try RoleAssignmentService.assignRoles(
+                counts: namedCounts,
+                voices: voices,
+                roleSettings: roleSettings,
+                language: exportLanguage
+            )
+        } catch {
+            errorMessage = L.describe(error, exportLanguage)
+            return
+        }
+
+        isWorking = true
+        WorkGuard.isBusy = true
+        progress.reset()
+        errorMessage = ""
+
+        let summaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result, voices: voices)
+        let report: ProgressHandler = progress.handler(scale: 1, offset: 0)
+        // задача заводится здесь, а не внутри await: иначе между нажатием кнопки и появлением
+        // ссылки на неё остаётся промежуток, в котором отменять нечего
+        let work: Task<String, Error> = Task.detached(priority: .userInitiated) {
+            var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: exportSubtitle.sourcePath)
+            return try DocxExporter.export(
+                subtitle: exportSubtitle,
+                outputFolder: exportFolder,
+                digest: exportDigest,
+                language: exportLanguage,
+                paths: &paths,
+                roleHighlights: result.roleToHighlight,
+                voiceSummaries: summaries,
+                fileSuffix: suffix,
+                progress: report
+            )
+        }
+        exportTask = work
 
         Task {
             do {
-                let result: RoleAssignmentResult = try RoleAssignmentService.assignRoles(
-                    counts: exportDigest.counts,
-                    voices: voices,
-                    roleSettings: settings,
-                    language: exportLanguage
-                )
-                let summaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result, voices: voices)
-                let report: ProgressHandler = progress.handler(scale: 1, offset: 0)
-                let path: String = try await Task.detached(priority: .userInitiated) {
-                    var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: exportSubtitle.sourcePath)
-                    return try DocxExporter.export(
-                        subtitle: exportSubtitle,
-                        outputFolder: exportFolder,
-                        digest: exportDigest,
-                        language: exportLanguage,
-                        paths: &paths,
-                        roleHighlights: result.roleToHighlight,
-                        voiceSummaries: summaries,
-                        fileSuffix: suffix,
-                        progress: report
-                    )
-                }.value
-                isWorking = false
+                let path: String = try await work.value
+                finishExport()
                 onComplete(path, result)
                 dismiss()
+            } catch is CancellationError {
+                // отмену запросил сам пользователь: показывать её как ошибку незачем
+                finishExport()
             } catch {
-                isWorking = false
+                finishExport()
                 errorMessage = L.describe(error, exportLanguage)
             }
         }
+    }
+
+    private func finishExport() {
+        exportTask = nil
+        isWorking = false
+        WorkGuard.isBusy = false
     }
 
     private func buildVoiceSummaries(result: RoleAssignmentResult, voices: [VoiceConfig]) -> [VoiceRoleSummary] {
