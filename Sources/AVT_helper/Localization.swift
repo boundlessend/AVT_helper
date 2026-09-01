@@ -4,14 +4,22 @@ enum L {
     /// значение, которого нет ни у одного ключа: по нему видно, что перевод не нашёлся
     private static let missingMarker: String = "\u{0}absent"
 
-    /// текст по ключу на выбранном языке; отсутствие перевода - ошибка сборки текстов, а не норма
+    /// текст по ключу на выбранном языке; отсутствие перевода - ошибка сборки текстов, а не норма.
+    /// assertionFailure вырезается из релизной сборки, поэтому там нужен запасной путь: перевод берётся
+    /// у второго языка, и пользователь видит текст на чужом языке, а не служебный ключ
     static func text(_ key: String, _ language: AppLanguage) -> String {
         let value: String = bundle(language).localizedString(forKey: key, value: missingMarker, table: nil)
-        if value == missingMarker {
-            assertionFailure("нет перевода для ключа \(key) на языке \(language.rawValue)")
-            return key
+        if value != missingMarker {
+            return value
         }
-        return value
+        assertionFailure("нет перевода для ключа \(key) на языке \(language.rawValue)")
+        for fallback in AppLanguage.allCases where fallback != language {
+            let spare: String = bundle(fallback).localizedString(forKey: key, value: missingMarker, table: nil)
+            if spare != missingMarker {
+                return spare
+            }
+        }
+        return key
     }
 
     /// число с существительным в нужной форме. русский требует трёх форм, и выбирать их
@@ -55,11 +63,27 @@ enum L {
         }
     }
 
-    /// подставляет значения в плейсхолдеры вида {token} локализованной строки
+    /// подставляет значения в плейсхолдеры вида {token} локализованной строки. замена идёт одним проходом,
+    /// потому что последовательные replacingOccurrences подставляют значения и внутрь уже подставленного
+    /// текста, а порядок обхода словаря к тому же не определён
     static func format(_ key: String, _ language: AppLanguage, _ replacements: [String: String]) -> String {
-        replacements.reduce(text(key, language)) { partial, pair in
-            partial.replacingOccurrences(of: "{\(pair.key)}", with: pair.value)
+        let source: String = text(key, language)
+        var result: String = ""
+        var rest: Substring = source[...]
+        while let open: String.Index = rest.firstIndex(of: "{") {
+            let afterOpen: String.Index = rest.index(after: open)
+            guard let close: String.Index = rest[afterOpen...].firstIndex(of: "}"),
+                let value: String = replacements[String(rest[afterOpen..<close])]
+            else {
+                result += rest[..<afterOpen]
+                rest = rest[afterOpen...]
+                continue
+            }
+            result += rest[..<open]
+            result += value
+            rest = rest[rest.index(after: close)...]
         }
+        return result + rest
     }
 
     /// язык выбирается в самой программе, поэтому нужен именно бандл нужной локали,

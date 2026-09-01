@@ -15,8 +15,9 @@
 "docx.roleStats" = "Role statistics";
 "done" = "Done!";
 "done.failed" = "Files that failed: {n}. See the message log for details.";
-"dropHint" = "Drop subtitle files here or click “Open subtitles”";
+"dropHint" = "Drop subtitle files here";
 "dropUnsupported" = "Those files cannot be read. ASS, SSA, SRT, VTT and SRP will do.";
+"error.assFieldOrder" = "The Format line of the [Events] block declares an unsupported field order: Text must come last.";
 "error.cannotPickVoice" = "Could not pick a voice for role {r}.";
 "error.decodeFailed" = "Could not detect the file encoding.";
 "error.exportPrefix" = "Export error";
