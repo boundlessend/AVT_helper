@@ -8,15 +8,17 @@ enum TextTools {
             .replacingOccurrences(of: " , ", with: "_")
             .replacingOccurrences(of: " / ", with: "_")
             .replacingOccurrences(of: " \\ ", with: "_")
+            .replacingOccurrences(of: " \(assRoleSeparator) ", with: "_")
             .replacingOccurrences(of: ",", with: "_")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "\\", with: "_")
+            .replacingOccurrences(of: assRoleSeparator, with: "_")
             .replacingOccurrences(of: "?", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// в ASS поле Name одно, а реплику могут произносить хором: роли пишутся через этот разделитель
-    /// и по нему же читаются обратно, потому что cleanRoleName его не трогает
+    /// и по нему же читаются обратно, поэтому cleanRoleName вычищает его из самих имён
     static let assRoleSeparator: String = "|"
 
     /// приводит список сырых имён к очищенным уникальным ролям без учёта регистра
@@ -32,38 +34,85 @@ enum TextTools {
         return result
     }
 
-    /// снимает разметку ASS: вырезает неэкранированные блоки {...}, разворачивает переносы и экранированные скобки
+    /// снимает разметку ASS: вырезает неэкранированные блоки {...}, разворачивает переносы и экранированные символы
     static func cleanAssText(_ input: String) -> String {
-        let withoutOverrides: String = input.replacingOccurrences(
-            of: #"(?<!\\)\{.*?(?<!\\)\}"#,
-            with: "",
-            options: [.regularExpression]
-        )
-        return
-            withoutOverrides
-            .replacingOccurrences(of: "\\N", with: "\n")
-            .replacingOccurrences(of: "\\n", with: "\n")
-            .replacingOccurrences(of: "\\h", with: " ")
-            .replacingOccurrences(of: "\\{", with: "{")
-            .replacingOccurrences(of: "\\}", with: "}")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutOverrides: String = removingMatches(assOverrideRegex, in: input)
+        return unescapeAssText(withoutOverrides).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// готовит текст реплики к записи в ASS: переносы строк и фигурные скобки, иначе текст будет прочитан как разметка
+    /// готовит текст реплики к записи в ASS: обратный слэш, фигурные скобки и переносы строк,
+    /// иначе текст будет прочитан как разметка. пустой блок {} после экранированной скобки нужен VSFilter:
+    /// он не понимает \{ и без него съедает текст до следующей закрывающей скобки
     static func escapeAssText(_ input: String) -> String {
-        input
-            .replacingOccurrences(of: "{", with: "\\{")
-            .replacingOccurrences(of: "}", with: "\\}")
-            .replacingOccurrences(of: "\r\n", with: "\\N")
-            .replacingOccurrences(of: "\n", with: "\\N")
-            .replacingOccurrences(of: "\r", with: "\\N")
+        var result: String = ""
+        result.reserveCapacity(input.count)
+        for character in input.replacingOccurrences(of: "\r\n", with: "\n") {
+            switch character {
+            case "\\":
+                result += "\\\\"
+            case "{":
+                result += "\\{{}"
+            case "}":
+                result += "\\}{}"
+            case "\n", "\r":
+                result += "\\N"
+            default:
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    /// разворачивает экранирование ASS одним проходом слева направо: цепочка замен прочитала бы
+    /// "\\n" из экранированного обратного слэша как перенос строки
+    private static func unescapeAssText(_ input: String) -> String {
+        let characters: [Character] = Array(input)
+        var result: String = ""
+        result.reserveCapacity(characters.count)
+        var index: Int = 0
+        while index < characters.count {
+            let character: Character = characters[index]
+            guard character == "\\", index + 1 < characters.count else {
+                result.append(character)
+                index += 1
+                continue
+            }
+            let next: Character = characters[index + 1]
+            switch next {
+            case "N", "n":
+                result.append("\n")
+            case "h":
+                result.append(" ")
+            case "\\", "{", "}":
+                result.append(next)
+            default:
+                result.append(character)
+                result.append(next)
+            }
+            index += 2
+        }
+        return result
     }
 
     /// пометки роли стоят в начале строки; те же скобки посреди реплики - это ремарка, а не имя
     private static let leadingRolesPattern: String = #"^\s*(\[[^\]]+\]\s*)+"#
 
+    /// шаблоны компилируются один раз на тип, а не на каждую реплику
+    private static let bracketRoleRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"\[([^\]]*)\]"#)
+    private static let voiceTagRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"^\s*<v(?:\.[^\s>]+)*\s+([^>]+)>"#)
+    private static let assOverrideRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"(?<!\\)\{.*?(?<!\\)\}"#)
+    private static let vttTagRegex: NSRegularExpression? = try? NSRegularExpression(pattern: #"</?[^>]+>"#)
+
+    private static func removingMatches(_ regex: NSRegularExpression?, in input: String) -> String {
+        guard let regex: NSRegularExpression = regex else {
+            return input
+        }
+        let range: NSRange = NSRange(input.startIndex..<input.endIndex, in: input)
+        return regex.stringByReplacingMatches(in: input, range: range, withTemplate: "")
+    }
+
     static func extractBracketRoles(_ input: String) -> [String] {
-        guard let regex: NSRegularExpression = try? NSRegularExpression(pattern: #"\[([^\]]*)\]"#) else {
+        guard let regex: NSRegularExpression = bracketRoleRegex else {
             return []
         }
 
@@ -94,7 +143,7 @@ enum TextTools {
 
     /// имена говорящих из тегов <v Имя> в начале строк WebVTT: штатная разметка роли этого формата
     static func extractVoiceTagRoles(_ input: String) -> [String] {
-        guard let regex: NSRegularExpression = try? NSRegularExpression(pattern: #"^\s*<v(?:\.[^\s>]+)*\s+([^>]+)>"#) else {
+        guard let regex: NSRegularExpression = voiceTagRegex else {
             return []
         }
         let names: [String] = normalizedLines(input).compactMap { line in
@@ -111,7 +160,7 @@ enum TextTools {
 
     /// снимает разметку WebVTT и разворачивает её сущности: в реплике должен остаться только текст
     static func cleanVttText(_ input: String) -> String {
-        let withoutTags: String = input.replacingOccurrences(of: #"</?[^>]+>"#, with: "", options: [.regularExpression])
+        let withoutTags: String = removingMatches(vttTagRegex, in: input)
         return
             withoutTags
             .replacingOccurrences(of: "&lt;", with: "<")
@@ -134,14 +183,16 @@ enum TextTools {
             .joined()
     }
 
-    /// имя файла без запрещённых символов и не длиннее предела файловой системы:
-    /// длинная роль в имени иначе роняет запись посреди прогона
+    /// имя файла без запрещённых и управляющих символов, без ведущих точек и не длиннее предела файловой системы:
+    /// длинная роль в имени иначе роняет запись посреди прогона, а точка в начале прячет файл
     static func safeFileName(_ input: String) -> String {
-        let invalid: CharacterSet = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        let clean: String =
+        let invalid: CharacterSet = CharacterSet(charactersIn: "/\\?%*|\"<>:").union(.controlCharacters)
+        let sanitized: String =
             input
             .components(separatedBy: invalid)
             .joined(separator: "_")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean: String = String(sanitized.drop(while: { character in character == "." }))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return clean.isEmpty ? "export" : truncated(clean, toBytes: AppLimits.maxFileNameBytes)
     }

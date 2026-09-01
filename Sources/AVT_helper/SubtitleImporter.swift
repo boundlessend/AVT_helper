@@ -12,7 +12,7 @@ enum SubtitleImporter {
 
         switch sourceType {
         case .ass, .ssa:
-            let document: AssDocument = try importAss(text: text, progress: progress)
+            let document: AssDocument = try importAss(text: text, language: language, progress: progress)
             lines = document.lines
             script = document.script
         case .srt:
@@ -31,12 +31,7 @@ enum SubtitleImporter {
             baseName: url.deletingPathExtension().lastPathComponent,
             sourcePath: url.standardizedFileURL.path,
             sourceType: sourceType,
-            lines: canonicalizedRoles(lines).sorted { left, right in
-                if left.start == right.start {
-                    return left.end < right.end
-                }
-                return left.start < right.start
-            },
+            lines: orderedByTime(canonicalizedRoles(lines)),
             assScript: script
         )
     }
@@ -140,21 +135,37 @@ enum SubtitleImporter {
                 continue
             }
         }
+        // пустой текст раскодирован верно: про отсутствие реплик пользователю скажет error.noLines
         if total == 0 {
-            return false
+            return true
         }
         return Double(broken) / Double(total) < 0.01
     }
 
     private static func decodeByBom(data: Data) -> String? {
-        let bytes: [UInt8] = [UInt8](data.prefix(3))
+        let bytes: [UInt8] = [UInt8](data.prefix(4))
         if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
-            return String(data: data.dropFirst(3), encoding: .utf8)
+            return plausibleOrNil(String(data: data.dropFirst(3), encoding: .utf8))
+        }
+        // UTF-32 проверяется раньше UTF-16: её BOM начинается той же парой байтов, и файл прочитался бы в нули
+        if bytes.count >= 4, bytes[0] == 0xFF, bytes[1] == 0xFE, bytes[2] == 0x00, bytes[3] == 0x00 {
+            return plausibleOrNil(String(data: data, encoding: .utf32))
+        }
+        if bytes.count >= 4, bytes[0] == 0x00, bytes[1] == 0x00, bytes[2] == 0xFE, bytes[3] == 0xFF {
+            return plausibleOrNil(String(data: data, encoding: .utf32))
         }
         if bytes.count >= 2, (bytes[0] == 0xFF && bytes[1] == 0xFE) || (bytes[0] == 0xFE && bytes[1] == 0xFF) {
-            return String(data: data, encoding: .utf16)
+            return plausibleOrNil(String(data: data, encoding: .utf16))
         }
         return nil
+    }
+
+    /// BOM говорит только о разметке байтов: текст всё равно осматривается, иначе подмена BOM даёт мусор
+    private static func plausibleOrNil(_ text: String?) -> String? {
+        guard let text: String = text, isPlausibleText(text) else {
+            return nil
+        }
+        return text
     }
 
     private static let windowsCyrillic: String.Encoding = {
@@ -174,8 +185,8 @@ enum SubtitleImporter {
         "layer", "start", "end", "style", "name", "marginl", "marginr", "marginv", "effect", "text",
     ]
 
-    private static func importAss(text: String, progress: @escaping ProgressHandler) throws -> AssDocument {
-        let rawLines: [String] = text.components(separatedBy: .newlines)
+    private static func importAss(text: String, language: AppLanguage, progress: @escaping ProgressHandler) throws -> AssDocument {
+        let rawLines: [String] = normalizedNewlines(text).components(separatedBy: "\n")
         var counter: ProgressCounter = ProgressCounter(total: rawLines.count, report: progress)
 
         var section: String = ""
@@ -202,7 +213,10 @@ enum SubtitleImporter {
             case let name where name.contains("styles"):
                 styles.append(trimmed)
             case "[events]":
-                if let declared: [String] = assFieldOrder(trimmed) {
+                if isAssFormatLine(trimmed) {
+                    guard let declared: [String] = assFieldOrder(trimmed) else {
+                        throw SubtitleError.importFailed(L.text("error.assFieldOrder", language))
+                    }
                     fields = declared
                     continue
                 }
@@ -225,11 +239,12 @@ enum SubtitleImporter {
         return AssDocument(lines: lines, script: script)
     }
 
-    /// читает строку Format блока [Events]; nil означает, что это не она
+    private static func isAssFormatLine(_ line: String) -> Bool {
+        line.range(of: "Format:", options: [.caseInsensitive, .anchored]) != nil
+    }
+
+    /// читает порядок полей строки Format блока [Events]; nil означает, что порядок непригоден для разбора
     private static func assFieldOrder(_ line: String) -> [String]? {
-        guard line.range(of: "Format:", options: [.caseInsensitive, .anchored]) != nil else {
-            return nil
-        }
         let declared: [String] =
             line
             .dropFirst("Format:".count)
@@ -262,8 +277,10 @@ enum SubtitleImporter {
             }
             return String(parts[index]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        // конец раньше начала - такая же порча, как неразобранный таймкод: реплика отбрасывается
         guard let start: TimeInterval = try? TimeTools.parseAss(value("start")),
-            let end: TimeInterval = try? TimeTools.parseAss(value("end"))
+            let end: TimeInterval = try? TimeTools.parseAss(value("end")),
+            end >= start
         else {
             return nil
         }
@@ -283,24 +300,45 @@ enum SubtitleImporter {
         )
     }
 
+    /// разобранный блок «номер, строка со стрелкой, текст»: он одинаков у SRT и VTT
+    private struct TimedBlock {
+        let start: TimeInterval
+        let end: TimeInterval
+        let rawText: String
+    }
+
+    /// разбирает блок по строке со стрелкой; endTime приводит правую часть к таймкоду, отрезая cue settings у VTT
+    private static func parseTimedBlock(
+        _ block: String,
+        parseTime: (String) throws -> TimeInterval,
+        endTime: (String) -> String
+    ) -> TimedBlock? {
+        let lines: [String] = block.components(separatedBy: "\n")
+        guard let timeIndex: Int = lines.firstIndex(where: { line in line.contains("-->") }) else {
+            return nil
+        }
+        let timeParts: [String] = lines[timeIndex].components(separatedBy: "-->")
+        // конец раньше начала - такая же порча, как неразобранный таймкод: реплика отбрасывается
+        guard timeParts.count == 2,
+            let start: TimeInterval = try? parseTime(timeParts[0]),
+            let end: TimeInterval = try? parseTime(endTime(timeParts[1])),
+            end >= start
+        else {
+            return nil
+        }
+        let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return TimedBlock(start: start, end: end, rawText: rawText)
+    }
+
     private static func importSrt(text: String, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
         let blocks: [String] = normalizedBlocks(text: text)
         var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
         return try blocks.compactMap { block in
             try counter.step()
-            let lines: [String] = block.components(separatedBy: "\n")
-            guard let timeIndex: Int = lines.firstIndex(where: { line in line.contains("-->") }) else {
+            guard let parsed: TimedBlock = parseTimedBlock(block, parseTime: TimeTools.parseSrt, endTime: { part in part }) else {
                 return nil
             }
-            let timeParts: [String] = lines[timeIndex].components(separatedBy: "-->")
-            guard timeParts.count == 2,
-                let start: TimeInterval = try? TimeTools.parseSrt(timeParts[0]),
-                let end: TimeInterval = try? TimeTools.parseSrt(timeParts[1])
-            else {
-                return nil
-            }
-            let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            return buildLine(start: start, end: end, rawText: rawText)
+            return buildLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText)
         }
     }
 
@@ -310,32 +348,38 @@ enum SubtitleImporter {
         var counter: ProgressCounter = ProgressCounter(total: blocks.count, report: progress)
         return try blocks.compactMap { block in
             try counter.step()
-            if block.uppercased().hasPrefix("WEBVTT") || block.uppercased().hasPrefix("NOTE") {
+            if isVttMetadataBlock(block) {
                 return nil
             }
-            let lines: [String] = block.components(separatedBy: "\n")
-            guard let timeIndex: Int = lines.firstIndex(where: { line in line.contains("-->") }) else {
+            guard let parsed: TimedBlock = parseTimedBlock(block, parseTime: TimeTools.parseVtt, endTime: vttEndTime) else {
                 return nil
             }
-            let timeParts: [String] = lines[timeIndex].components(separatedBy: "-->")
-            guard timeParts.count == 2,
-                let start: TimeInterval = try? TimeTools.parseVtt(timeParts[0]),
-                let end: TimeInterval = try? TimeTools.parseVtt(
-                    timeParts[1]
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .components(separatedBy: .whitespaces)
-                        .first ?? ""
-                )
-            else {
-                return nil
-            }
-            let rawText: String = lines.dropFirst(timeIndex + 1).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            return buildVttLine(start: start, end: end, rawText: rawText)
+            return buildVttLine(start: parsed.start, end: parsed.end, rawText: parsed.rawText)
+        }
+    }
+
+    /// в VTT за конечным таймкодом идут cue settings, отделённые пробелом: времени принадлежит только первое слово
+    private static func vttEndTime(_ part: String) -> String {
+        part.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespaces).first ?? ""
+    }
+
+    private static let vttMetadataKeywords: [String] = ["WEBVTT", "NOTE", "STYLE", "REGION"]
+
+    /// служебный блок опознаётся по первой строке целиком: идентификатор cue вида «NOTES-3» служебным не является
+    private static func isVttMetadataBlock(_ block: String) -> Bool {
+        let head: String = (block.components(separatedBy: "\n").first ?? "").trimmingCharacters(in: .whitespaces).uppercased()
+        return vttMetadataKeywords.contains { keyword in
+            head == keyword || head.hasPrefix(keyword + " ") || head.hasPrefix(keyword + "\t")
         }
     }
 
     private static func importSrp(text: String, language: AppLanguage, progress: @escaping ProgressHandler) throws -> [SubtitleLine] {
-        let data: Data = Data(text.utf8)
+        // внутренние сущности разворачиваются уже в конструкторе XMLDocument, поэтому DOCTYPE ищется в тексте:
+        // 581 байт бомбы иначе успевают развернуться в гигабайт до любой проверки
+        if declaresDoctype(text) {
+            throw SubtitleError.importFailed(L.text("error.xmlEntities", language))
+        }
+        let data: Data = Data(xmlWithUtf8Declaration(text).utf8)
         // внешние сущности выключены: иначе чужой SRP прочитает локальный файл или сходит в сеть при импорте
         let document: XMLDocument = try XMLDocument(data: data, options: [.nodePreserveWhitespace, .nodeLoadExternalEntitiesNever])
         // DTD в субтитрах не нужен ни одному инструменту, зато через него разворачивают сущности-бомбы
@@ -353,8 +397,10 @@ enum SubtitleImporter {
                 .replacingOccurrences(of: "\\n", with: " ")
                 .replacingOccurrences(of: "\\h", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            // конец раньше начала - такая же порча, как неразобранный таймкод: реплика отбрасывается
             guard let start: TimeInterval = flexibleTime(childText(node: node, name: "BeginTime")),
-                let end: TimeInterval = flexibleTime(childText(node: node, name: "EndTime"))
+                let end: TimeInterval = flexibleTime(childText(node: node, name: "EndTime")),
+                end >= start
             else {
                 return nil
             }
@@ -405,12 +451,62 @@ enum SubtitleImporter {
     }
 
     private static func normalizedBlocks(text: String) -> [String] {
-        text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+        normalizedNewlines(text)
+            // пустая строка с пробелами или табуляцией тоже разделяет блоки, иначе две реплики склеиваются в одну
+            .replacingOccurrences(of: "\n[ \t]*\n", with: "\n\n", options: .regularExpression)
             .components(separatedBy: "\n\n")
             .map { block in block.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { block in !block.isEmpty }
+    }
+
+    /// приводит переводы строк к \n: иначе CRLF даёт лишний пустой элемент при разбиении
+    private static func normalizedNewlines(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    /// порядок реплик детерминирован: одинаковые таймкоды разводит исходный номер, иначе хоровые
+    /// строки переставляются от запуска к запуску
+    private static func orderedByTime(_ lines: [SubtitleLine]) -> [SubtitleLine] {
+        lines
+            .enumerated()
+            .sorted { left, right in
+                if left.element.start != right.element.start {
+                    return left.element.start < right.element.start
+                }
+                if left.element.end != right.element.end {
+                    return left.element.end < right.element.end
+                }
+                return left.offset < right.offset
+            }
+            .map { pair in pair.element }
+    }
+
+    /// DOCTYPE ищется до первого элемента: внутри текста реплики та же строка ничего не объявляет
+    private static func declaresDoctype(_ text: String) -> Bool {
+        guard let doctype: Range<String.Index> = text.range(of: "<!DOCTYPE", options: [.caseInsensitive]) else {
+            return false
+        }
+        return text[text.startIndex..<doctype.lowerBound].range(of: "<[^?!]", options: .regularExpression) == nil
+    }
+
+    /// текст уже раскодирован readText, а объявление кодировки в прологе осталось: libxml2 прочитал бы
+    /// байты UTF-8 как windows-1251 и выдал кракозябры
+    private static func xmlWithUtf8Declaration(_ text: String) -> String {
+        guard let open: Range<String.Index> = text.range(of: "<?xml"),
+            let close: Range<String.Index> = text.range(of: "?>", range: open.upperBound..<text.endIndex),
+            !text[text.startIndex..<open.lowerBound].contains("<")
+        else {
+            return text
+        }
+        let prolog: String = String(text[open.lowerBound..<close.lowerBound])
+        let declared: String = prolog.replacingOccurrences(
+            of: "encoding\\s*=\\s*(\"[^\"]*\"|'[^']*')",
+            with: "encoding=\"utf-8\"",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        return text.replacingCharacters(in: open.lowerBound..<close.lowerBound, with: declared)
     }
 
     /// выбирает имя роли из полей строки Dialogue; пустая строка означает, что роль не распознана
@@ -429,13 +525,8 @@ enum SubtitleImporter {
         return nodes.first?.stringValue ?? ""
     }
 
+    /// SRP пишет время и с запятой, и с точкой: parseSrt сам приводит разделитель и разбирает оба написания
     private static func flexibleTime(_ input: String) -> TimeInterval? {
-        if let value: TimeInterval = try? TimeTools.parseSrt(input.replacingOccurrences(of: ".", with: ",")) {
-            return value
-        }
-        if let value: TimeInterval = try? TimeTools.parseAss(input.replacingOccurrences(of: ",", with: ".")) {
-            return value
-        }
-        return nil
+        try? TimeTools.parseSrt(input)
     }
 }

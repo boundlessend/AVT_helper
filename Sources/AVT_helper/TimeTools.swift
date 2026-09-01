@@ -1,6 +1,10 @@
 import Foundation
 
 enum TimeTools {
+    /// верхний предел на часы: больше любого фильма, при этом hours * 3600 заведомо не переполняет Int
+    private static let maxHours: Int = 1000
+    private static let maxSeconds: Int = maxHours * 3600
+
     /// разбирает таймкод SRT, допуская точку как разделитель миллисекунд в нестрогих файлах
     static func parseSrt(_ input: String) throws -> TimeInterval {
         try parseTime(input.replacingOccurrences(of: ".", with: ","), separator: ",", allowShort: false)
@@ -10,25 +14,9 @@ enum TimeTools {
         try parseTime(input, separator: ".", allowShort: true)
     }
 
+    /// в ASS разделитель долей секунды точка, но встречается и запятая
     static func parseAss(_ input: String) throws -> TimeInterval {
-        let normalized: String =
-            input
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: ",", with: ".")
-        let parts: [String] = normalized.components(separatedBy: ".")
-        guard parts.count == 2 else {
-            throw SubtitleError.invalidTime(input)
-        }
-        let hms: [String] = parts[0].components(separatedBy: ":")
-        guard hms.count == 3,
-            let hours: Int = Int(hms[0]),
-            let minutes: Int = Int(hms[1]),
-            let seconds: Int = Int(hms[2])
-        else {
-            throw SubtitleError.invalidTime(input)
-        }
-        let milliseconds: Int = try fractionMilliseconds(parts[1])
-        return TimeInterval((hours * 3600 + minutes * 60 + seconds)) + TimeInterval(milliseconds) / 1000
+        try parseTime(input.replacingOccurrences(of: ",", with: "."), separator: ".", allowShort: false)
     }
 
     static func formatSrt(_ input: TimeInterval) -> String {
@@ -71,32 +59,32 @@ enum TimeTools {
         let minutes: Int
         let seconds: Int
         if hms.count == 2 {
-            guard let parsedMinutes: Int = Int(hms[0]), let parsedSeconds: Int = Int(hms[1]) else {
-                throw SubtitleError.invalidTime(input)
-            }
             hours = 0
-            minutes = parsedMinutes
-            seconds = parsedSeconds
+            minutes = try component(hms[0], limit: maxSeconds, input: input)
+            seconds = try component(hms[1], limit: maxSeconds, input: input)
         } else {
-            guard let parsedHours: Int = Int(hms[0]),
-                let parsedMinutes: Int = Int(hms[1]),
-                let parsedSeconds: Int = Int(hms[2])
-            else {
-                throw SubtitleError.invalidTime(input)
-            }
-            hours = parsedHours
-            minutes = parsedMinutes
-            seconds = parsedSeconds
+            hours = try component(hms[0], limit: maxHours, input: input)
+            minutes = try component(hms[1], limit: maxSeconds, input: input)
+            seconds = try component(hms[2], limit: maxSeconds, input: input)
         }
 
         let milliseconds: Int = try fractionMilliseconds(parts[1])
         return TimeInterval((hours * 3600 + minutes * 60 + seconds)) + TimeInterval(milliseconds) / 1000
     }
 
+    /// компонент таймкода состоит только из цифр и не выходит за предел: Int("-1") разобрался бы успешно
+    /// и дал отрицательное время, а часы в шестнадцать знаков роняли бы процесс на переполнении
+    private static func component(_ raw: String, limit: Int, input: String) throws -> Int {
+        guard !raw.isEmpty, isAsciiDigits(raw), let value: Int = Int(raw), value <= limit else {
+            throw SubtitleError.invalidTime(input)
+        }
+        return value
+    }
+
     /// переводит долю секунды в миллисекунды с учётом числа цифр: "5" -> 500, "50" -> 500, "500" -> 500
     private static func fractionMilliseconds(_ raw: String) throws -> Int {
         let digits: String = String(raw.prefix(3))
-        guard !digits.isEmpty, let value: Int = Int(digits) else {
+        guard !digits.isEmpty, isAsciiDigits(digits), let value: Int = Int(digits) else {
             throw SubtitleError.invalidTime(raw)
         }
         switch digits.count {
@@ -109,8 +97,13 @@ enum TimeTools {
         }
     }
 
+    private static func isAsciiDigits(_ raw: String) -> Bool {
+        raw.allSatisfy { character in character.isASCII && character.isNumber }
+    }
+
     private static func splitTime(_ input: TimeInterval) -> TimeParts {
-        let clamped: TimeInterval = max(0, input)
+        // зажимаем и сверху: перевод слишком большого значения в Int - это trap, а не ошибка, его не поймать через try?
+        let clamped: TimeInterval = min(max(0, input), TimeInterval(maxSeconds))
         let totalMilliseconds: Int = Int((clamped * 1000).rounded())
         let hours: Int = totalMilliseconds / 3_600_000
         let minutes: Int = (totalMilliseconds / 60_000) % 60
@@ -125,25 +118,4 @@ struct TimeParts {
     let minutes: Int
     let seconds: Int
     let milliseconds: Int
-}
-
-enum SubtitleError: Error {
-    case unsupportedFormat(String)
-    case invalidTime(String)
-    /// сообщение уже локализовано в месте выброса
-    case importFailed(String)
-    case exportFailed(String)
-
-    func message(_ language: AppLanguage) -> String {
-        switch self {
-        case .unsupportedFormat(let path):
-            return "\(L.text("error.unsupportedFormat", language)): \(path)"
-        case .invalidTime(let value):
-            return "\(L.text("error.invalidTime", language)): \(value)"
-        case .importFailed(let message):
-            return "\(L.text("error.importPrefix", language)): \(message)"
-        case .exportFailed(let message):
-            return "\(L.text("error.exportPrefix", language)): \(message)"
-        }
-    }
 }
