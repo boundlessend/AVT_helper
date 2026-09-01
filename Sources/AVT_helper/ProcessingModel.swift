@@ -31,6 +31,19 @@ struct ExportRun: Sendable {
     let failed: Int
 }
 
+/// что прогон успел сделать с одним файлом очереди
+private struct QueueItemOutcome: Sendable {
+    let id: QueuedFile.ID
+    let state: QueueItemState
+    let created: [String]
+}
+
+/// итог фонового прогона: отмена возвращает уже накопленное, а не теряет его вместе с брошенной ошибкой
+private struct QueueRunOutcome: Sendable {
+    let items: [QueueItemOutcome]
+    let cancelled: Bool
+}
+
 /// держит очередь файлов и выполняет тяжёлые импорт и экспорт вне главного потока
 @MainActor
 final class ProcessingModel: ObservableObject {
@@ -143,37 +156,70 @@ final class ProcessingModel: ObservableObject {
     private func loadSelected(path: String, language: AppLanguage) async {
         beginWork()
         let report: ProgressHandler = progress.handler(scale: 1, offset: 0)
-        let work: Task<ImportedSubtitle, Error> = Task.detached(priority: .userInitiated) {
-            try SubtitleImporter.importFile(path: path, language: language, progress: report)
+        // дайджест считается там же, где идёт разбор: на главном потоке это лишние проходы по всем репликам
+        let work: Task<(ImportedSubtitle, SubtitleDigest), Error> = Task.detached(priority: .userInitiated) {
+            let imported: ImportedSubtitle = try SubtitleImporter.importFile(path: path, language: language, progress: report)
+            return (imported, SubtitleDigest(subtitle: imported, language: language))
         }
         cancelCurrentWork = { work.cancel() }
         do {
-            let imported: ImportedSubtitle = try await work.value
-            apply(imported: imported, language: language)
-            log(L.plural("count.lines", language, imported.lines.count) + ", \(imported.sourceType.rawValue)")
+            let (imported, computed): (ImportedSubtitle, SubtitleDigest) = try await work.value
+            apply(imported: imported, digest: computed)
+            // непрочитанные блоки называются числом: молча потерянная часть файла
+            // выглядит как файл, в котором этих реплик и не было
+            let skipped: String =
+                imported.skippedBlocks == 0
+                ? ""
+                : ", " + L.format("import.skipped", language, ["n": L.plural("count.blocks", language, imported.skippedBlocks)])
+            log(L.plural("count.lines", language, imported.lines.count) + ", \(imported.sourceType.rawValue)" + skipped)
+        } catch let cancellation as CancellationError {
+            // отменил пользователь: файл остаётся в очереди, а на экране остаётся прежний
+            log(L.describe(cancellation, language))
         } catch {
-            // прежний файл остаётся на экране: отменённый импорт не повод терять работу,
-            // а неудачный файл уходит из очереди, чтобы не мешал прогону
+            // неудачный файл уходит из очереди, чтобы не мешал прогону, а показанным снова числится тот,
+            // который на самом деле разобран
             queue.removeAll { file in file.path == path }
-            selectedFileID = importedSubtitle == nil ? nil : selectedFileID
+            selectedFileID = queue.first { file in file.path == importedSubtitle?.sourcePath }?.id
             log(L.describe(error, language))
         }
         finishWork()
     }
 
-    private func apply(imported: ImportedSubtitle, language: AppLanguage) {
+    private func apply(imported: ImportedSubtitle, digest computed: SubtitleDigest) {
         importedSubtitle = imported
-        digest = SubtitleDigest(subtitle: imported, language: language)
-        roleHighlights = RoleColors.automatic(roles: digest.roles, placeholder: digest.placeholder)
+        digest = computed
+        roleHighlights = RoleColors.automatic(roles: computed.roles, placeholder: computed.placeholder)
         roleVoices = [:]
     }
 
-    /// перечитывает показанный файл на другом языке: метка нераспознанной роли живёт в дайджесте
+    /// перечитывает показанный файл на другом языке: метка нераспознанной роли живёт в дайджесте.
+    /// готовая разролёвка при этом остаётся: язык интерфейса к назначенным голосам отношения не имеет,
+    /// а переименовывается только сама метка
     func refreshDigest(language: AppLanguage) {
         guard let subtitle: ImportedSubtitle = importedSubtitle else {
             return
         }
-        apply(imported: subtitle, language: language)
+        let previousPlaceholder: String? = digest.placeholder
+        let computed: SubtitleDigest = SubtitleDigest(subtitle: subtitle, language: language)
+        digest = computed
+        if roleVoices.isEmpty {
+            roleHighlights = RoleColors.automatic(roles: computed.roles, placeholder: computed.placeholder)
+            return
+        }
+        roleVoices = renamedPlaceholder(in: roleVoices, from: previousPlaceholder, to: computed.placeholder)
+        roleHighlights = renamedPlaceholder(in: roleHighlights, from: previousPlaceholder, to: computed.placeholder)
+    }
+
+    /// метка нераспознанной роли это подставленный текст, а не имя из файла: при смене языка
+    /// она меняется, и назначенное ей значение надо перенести на новое написание
+    private func renamedPlaceholder<Value>(in map: [String: Value], from old: String?, to new: String?) -> [String: Value] {
+        guard let old: String = old, let new: String = new, old != new, let value: Value = map[old] else {
+            return map
+        }
+        var result: [String: Value] = map
+        result.removeValue(forKey: old)
+        result[new] = value
+        return result
     }
 
     // MARK: - экспорт
@@ -193,10 +239,12 @@ final class ProcessingModel: ObservableObject {
         let preloaded: ImportedSubtitle? = importedSubtitle
         let box: ProgressBox = progress
 
-        let work: Task<[(QueuedFile.ID, QueueItemState, [String])], Error> = Task.detached(priority: .userInitiated) {
-            var results: [(QueuedFile.ID, QueueItemState, [String])] = []
+        let work: Task<QueueRunOutcome, Never> = Task.detached(priority: .userInitiated) {
+            var results: [QueueItemOutcome] = []
             for (index, item) in items.enumerated() {
-                try Task.checkCancellation()
+                if Task.isCancelled {
+                    return QueueRunOutcome(items: results, cancelled: true)
+                }
                 let base: Double = Double(index) / Double(items.count)
                 let span: Double = 1 / Double(items.count)
                 do {
@@ -223,43 +271,39 @@ final class ProcessingModel: ObservableObject {
                         language: language,
                         progress: box.handler(scale: span, offset: base)
                     )
-                    results.append((item.id, .done(created.count), created))
+                    results.append(QueueItemOutcome(id: item.id, state: .done(created.count), created: created))
                 } catch is CancellationError {
-                    throw CancellationError()
+                    // уже сделанное не пропадает вместе с отменой: оно уходит наверх вместе с признаком
+                    return QueueRunOutcome(items: results, cancelled: true)
                 } catch let error as PartialExportError {
-                    results.append((item.id, .failed(L.describe(error, language)), error.created))
+                    results.append(QueueItemOutcome(id: item.id, state: .failed(L.describe(error, language)), created: error.created))
                 } catch {
-                    results.append((item.id, .failed(L.describe(error, language)), []))
+                    results.append(QueueItemOutcome(id: item.id, state: .failed(L.describe(error, language)), created: []))
                 }
             }
-            return results
+            return QueueRunOutcome(items: results, cancelled: false)
         }
         cancelCurrentWork = { work.cancel() }
 
-        var run: ExportRun?
-        do {
-            let results: [(QueuedFile.ID, QueueItemState, [String])] = try await work.value
-            var created: [String] = []
-            var failed: Int = 0
-            for (id, state, paths) in results {
-                if let index: Int = queue.firstIndex(where: { file in file.id == id }) {
-                    queue[index].state = state
-                }
-                created += paths
-                if case .failed(let message) = state {
-                    failed += 1
-                    log(message)
-                }
+        let outcome: QueueRunOutcome = await work.value
+        var created: [String] = []
+        var failed: Int = 0
+        for item in outcome.items {
+            if let index: Int = queue.firstIndex(where: { file in file.id == item.id }) {
+                queue[index].state = item.state
             }
-            run = ExportRun(created: created, failed: failed)
-            log(
-                "\(L.text("ready", language)). \(L.text("createdFiles", language)): "
-                    + L.plural("count.files", language, created.count))
-        } catch {
-            log(L.describe(error, language))
+            created += item.created
+            if case .failed(let message) = item.state {
+                failed += 1
+                log(message)
+            }
         }
+        if outcome.cancelled {
+            log(L.text("cancelled", language))
+        }
+        log(L.format("done.summary", language, ["files": L.plural("count.files", language, created.count)]))
         finishWork()
-        return run
+        return ExportRun(created: created, failed: failed)
     }
 
     /// разролёвка кладёт готовый файл сама: модели остаётся запомнить его и раскрасить лист
@@ -278,6 +322,9 @@ final class ProcessingModel: ObservableObject {
 
     private func beginWork() {
         isWorking = true
+        // выход и закрытие последнего окна спрашивают подтверждение по этому флагу:
+        // сама модель про меню «Завершить» не знает, а знать о работе должен именно тот, кто пишет
+        WorkGuard.isBusy = true
         progress.reset()
         if !isHoldingTermination {
             ProcessInfo.processInfo.disableSuddenTermination()
@@ -288,6 +335,7 @@ final class ProcessingModel: ObservableObject {
     private func finishWork() {
         cancelCurrentWork = nil
         isWorking = false
+        WorkGuard.isBusy = false
         progress.reset()
         if isHoldingTermination {
             ProcessInfo.processInfo.enableSuddenTermination()
