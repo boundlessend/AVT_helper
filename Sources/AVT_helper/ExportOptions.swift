@@ -49,9 +49,10 @@ final class ExportOptions: ObservableObject {
             ?? FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
             ?? NSHomeDirectory()
 
-        // до вложенности префикс роли включался сам по себе: сохраняем прежний результат такой настройки
+        // вложенная настройка без родительской смысла не имеет: гасим её, а не включаем родительскую,
+        // иначе снятая пользователем галка отдельных файлов возвращалась бы при каждом запуске
         if srtSeparateWithRoles && !srtSeparateFiles {
-            srtSeparateFiles = true
+            srtSeparateWithRoles = false
         }
     }
 

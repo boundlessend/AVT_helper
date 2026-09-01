@@ -2,16 +2,12 @@ import SwiftUI
 
 enum RoleColors {
     /// цвета ролей до разролёвки: голосов ещё нет, поэтому цвет нужен только чтобы различать роли в листе.
-    /// подставленная метка «нет роли» цвета не получает: выделять в документе там нечего
+    /// подставленная метка «нет роли» цвета не получает: выделять в документе там нечего.
+    /// ролям сверх палитры цвет тоже не достаётся: девятый цвет неотличим от первого, и различать он перестаёт
     static func automatic(roles: [String], placeholder: String?) -> [String: WordHighlightColor] {
-        let palette: [WordHighlightColor] = WordHighlightColor.allCases
-        var result: [String: WordHighlightColor] = [:]
-        var index: Int = 0
-        for role in roles where role != placeholder {
-            result[role] = palette[index % palette.count]
-            index += 1
-        }
-        return result
+        let named: [String] = roles.filter { role in role != placeholder }
+        // uniquingKeysWith, а не uniqueKeysWithValues: повтор роли в списке уронил бы программу
+        return Dictionary(zip(named, WordHighlightColor.allCases), uniquingKeysWith: { first, _ in first })
     }
 
     /// экранный маркер: заливка мягче печатной, чтобы тёмный текст поверх неё оставался читаемым

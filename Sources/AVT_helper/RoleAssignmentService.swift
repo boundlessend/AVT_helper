@@ -18,15 +18,23 @@ final class VoiceSetup: ObservableObject {
         didSet { save() }
     }
 
+    /// правда ли, что сохранённый состав был, но не разобрался, и голоса сброшены к умолчанию:
+    /// отсутствие записи это не ошибка, а первый запуск, и говорить о нём нечего
+    @Published private(set) var lastLoadFailed: Bool = false
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        guard let data: Data = defaults.data(forKey: Self.storageKey),
-            let stored: [VoiceConfig] = try? JSONDecoder().decode([VoiceConfig].self, from: data),
+        guard let data: Data = defaults.data(forKey: Self.storageKey) else {
+            voices = Self.initial
+            return
+        }
+        guard let stored: [VoiceConfig] = try? JSONDecoder().decode([VoiceConfig].self, from: data),
             !stored.isEmpty
         else {
             voices = Self.initial
+            lastLoadFailed = true
             return
         }
         voices = Array(stored.prefix(Self.maxVoices))
@@ -86,9 +94,11 @@ enum RoleAssignmentService {
         var roleToVoice: [String: Int] = [:]
 
         for gender in VoiceGender.allCases {
+            // роль без настройки считается мужской: это умолчание интерфейса, и без него такая роль
+            // не попадала бы ни в один проход и молча оставалась бы без голоса
             let roles: [(String, Int)] =
                 counts
-                .filter { role, _ in genderByRole[role] == gender }
+                .filter { role, _ in genderByRole[role, default: .male] == gender }
                 .sorted { left, right in
                     if left.value == right.value {
                         return left.key.localizedCaseInsensitiveCompare(right.key) == .orderedAscending
