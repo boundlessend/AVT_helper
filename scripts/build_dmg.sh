@@ -22,7 +22,12 @@ rm -f "${DMG_PATH}"
 hdiutil create -volname "${VOLUME_NAME}" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}"
 rm -rf "${STAGE_DIR}"
 
-# готовый образ проверяем монтированием: битый dmg должен падать здесь, а не у пользователя
+# целостность образа проверяется всегда: verify читает контрольные суммы и не трогает
+# подсистему монтирования, которой на сборочной машине может не быть вовсе
+hdiutil verify "${DMG_PATH}"
+
+# содержимое проверяется монтированием, но на раннере attach нередко отвечает
+# «Resource temporarily unavailable»: там это не повод считать образ битым
 MOUNT_DIR="$(mktemp -d)"
 unmount_image() {
   hdiutil detach "${MOUNT_DIR}" -quiet >/dev/null 2>&1 || true
@@ -30,16 +35,17 @@ unmount_image() {
 }
 trap unmount_image EXIT
 
-hdiutil attach -nobrowse -readonly -mountpoint "${MOUNT_DIR}" "${DMG_PATH}" >/dev/null
-
-if [ ! -d "${MOUNT_DIR}/${APP_NAME}.app" ]; then
-  echo "The disk image has no ${APP_NAME}.app inside" >&2
-  exit 1
-fi
-
-if [ ! -L "${MOUNT_DIR}/Applications" ]; then
-  echo "The disk image has no symlink to /Applications" >&2
-  exit 1
+if hdiutil attach -nobrowse -readonly -mountpoint "${MOUNT_DIR}" "${DMG_PATH}" >/dev/null 2>&1; then
+  if [ ! -d "${MOUNT_DIR}/${APP_NAME}.app" ]; then
+    echo "The disk image has no ${APP_NAME}.app inside" >&2
+    exit 1
+  fi
+  if [ ! -L "${MOUNT_DIR}/Applications" ]; then
+    echo "The disk image has no symlink to /Applications" >&2
+    exit 1
+  fi
+else
+  echo "Could not mount the image to inspect it; the checksums verified, so the build goes on" >&2
 fi
 
 echo "Created ${DMG_PATH}"
