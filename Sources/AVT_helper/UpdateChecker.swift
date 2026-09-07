@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// клиент GitHub Releases для проверки наличия новой версии приложения
 enum UpdateChecker {
@@ -99,7 +100,8 @@ enum UpdateChecker {
 /// когда программа сама ходит на страницу релизов. проверка ничего не скачивает и не ставит:
 /// она только сообщает, что версия вышла, и открывает браузер
 @MainActor
-final class UpdateController: ObservableObject {
+@Observable
+final class UpdateController {
     /// один на приложение: проверку зовут и меню, и окно «О программе», и запуск,
     /// а ходить в сеть трижды за одним ответом незачем
     static let shared: UpdateController = UpdateController()
@@ -119,10 +121,10 @@ final class UpdateController: ObservableObject {
     /// час после неудачи: иначе единственный обрыв сети отодвигает следующую попытку на неделю
     private static let retryInterval: TimeInterval = 3600
 
-    @Published private(set) var available: UpdateChecker.ReleaseInfo?
-    @Published private(set) var isChecking: Bool = false
-    @Published private(set) var message: String = ""
-    @Published var automatic: Bool {
+    private(set) var available: UpdateChecker.ReleaseInfo?
+    private(set) var isChecking: Bool = false
+    private(set) var message: String = ""
+    var automatic: Bool {
         didSet { defaults.set(automatic, forKey: Key.automatic) }
     }
 

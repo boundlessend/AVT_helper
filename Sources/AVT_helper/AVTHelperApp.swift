@@ -131,7 +131,7 @@ struct AppMenuCommands: Commands {
     @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.windowActions) private var actions
-    @ObservedObject private var recent: RecentFiles = .shared
+    private let recent: RecentFiles = .shared
 
     private var language: AppLanguage {
         AppLanguage.resolve(appLanguageRaw)

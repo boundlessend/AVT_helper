@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// доля выполненной работы от 0 до 1; вызывается из фонового потока
 typealias ProgressHandler = @Sendable (Double) -> Void
@@ -8,8 +9,9 @@ typealias ProgressHandler = @Sendable (Double) -> Void
 /// только вперёд. Foundation.Progress сюда не годится: отмена уже живёт в дереве задач,
 /// и вторая система отмены рядом с ней только запутала бы
 @MainActor
-final class ProgressBox: ObservableObject {
-    @Published private(set) var value: Double = 0
+@Observable
+final class ProgressBox {
+    private(set) var value: Double = 0
 
     func reset() {
         value = 0

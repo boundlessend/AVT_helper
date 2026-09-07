@@ -1,9 +1,11 @@
 import Foundation
+import Observation
 
 /// состав голосов переживает закрытие листа: у сериала каст один на сезон,
 /// и настраивать его заново на каждую серию незачем
 @MainActor
-final class VoiceSetup: ObservableObject {
+@Observable
+final class VoiceSetup {
     private static let storageKey: String = "voiceSetup"
 
     /// голосов не может быть больше, чем цветов выделения: девятый голос неотличим от первого
@@ -14,13 +16,13 @@ final class VoiceSetup: ObservableObject {
         VoiceConfig(id: 2, gender: .female, color: .green),
     ]
 
-    @Published var voices: [VoiceConfig] {
+    var voices: [VoiceConfig] {
         didSet { save() }
     }
 
     /// правда ли, что сохранённый состав был, но не разобрался, и голоса сброшены к умолчанию:
     /// отсутствие записи это не ошибка, а первый запуск, и говорить о нём нечего
-    @Published private(set) var lastLoadFailed: Bool = false
+    private(set) var lastLoadFailed: Bool = false
 
     private let defaults: UserDefaults
 

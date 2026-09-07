@@ -1,25 +1,24 @@
 import SwiftUI
 
 struct RoleAssignmentView: View {
+    let model: ProcessingModel
     let subtitle: ImportedSubtitle
     /// роли и счётчики, уже посчитанные при импорте
     let digest: SubtitleDigest
     let outputFolder: String
     let language: AppLanguage
-    let onComplete: (String, RoleAssignmentResult) -> Void
+    let onComplete: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var setup: VoiceSetup = VoiceSetup()
+    @State private var setup: VoiceSetup = VoiceSetup()
     @State private var roleSettings: [RoleGenderSetting] = []
     /// распределение при текущих настройках; пересчитывается по действию, а не в body
     @State private var preview: RoleAssignmentResult?
     /// причина, по которой распределение невозможно: она же не даёт запустить разролёвку
     @State private var previewError: String = ""
     @State private var errorMessage: String = ""
-    @State private var isWorking: Bool = false
-    /// запись DOCX: без ссылки на задачу кнопке «Отменить» нечего было бы отменять
-    @State private var exportTask: Task<String, Error>?
-    @StateObject private var progress: ProgressBox = ProgressBox()
+    /// отмену просил сам пользователь: показывать её ошибкой незачем, а модель о просьбе не помнит
+    @State private var didCancel: Bool = false
 
     private var hasDuplicateColors: Bool {
         Set(setup.voices.map { voice in voice.color }).count != setup.voices.count
@@ -29,10 +28,6 @@ struct RoleAssignmentView: View {
     /// ровно как и в автоматической раскраске
     private var namedRoles: [String] {
         digest.roles.filter { role in role != digest.placeholder }
-    }
-
-    private var namedCounts: [String: Int] {
-        digest.counts.filter { role, _ in role != digest.placeholder }
     }
 
     private var previewHighlights: [String: WordHighlightColor] {
@@ -216,13 +211,14 @@ struct RoleAssignmentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            if isWorking {
-                ProgressReadout(progress: progress)
+            if model.isWorking {
+                ProgressReadout(progress: model.progress)
             }
             // одна и та же кнопка: пока идёт запись, «Отменить» отменяет её, а не закрывает лист
             Button(t("cancel")) {
-                if let work: Task<String, Error> = exportTask {
-                    work.cancel()
+                if model.isWorking {
+                    didCancel = true
+                    model.cancel()
                 } else {
                     dismiss()
                 }
@@ -232,7 +228,7 @@ struct RoleAssignmentView: View {
                 assignRoles()
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(isWorking || preview == nil)
+            .disabled(model.isWorking || preview == nil)
         }
     }
 
@@ -249,7 +245,7 @@ struct RoleAssignmentView: View {
     private func refreshPreview() {
         do {
             preview = try RoleAssignmentService.assignRoles(
-                counts: namedCounts,
+                counts: digest.namedCounts,
                 voices: setup.voices,
                 roleSettings: roleSettings,
                 language: language
@@ -297,84 +293,26 @@ struct RoleAssignmentView: View {
             errorMessage = t("hint.badOutputFolder")
             return
         }
-        let voices: [VoiceConfig] = setup.voices
-        let exportSubtitle: ImportedSubtitle = subtitle
-        let exportDigest: SubtitleDigest = digest
-        let exportFolder: String = outputFolder
-        let exportLanguage: AppLanguage = language
-        let suffix: String = t("file.assignmentSuffix")
-        let result: RoleAssignmentResult
-        do {
-            result = try RoleAssignmentService.assignRoles(
-                counts: namedCounts,
-                voices: voices,
-                roleSettings: roleSettings,
-                language: exportLanguage
-            )
-        } catch {
-            errorMessage = L.describe(error, exportLanguage)
-            return
-        }
-
-        isWorking = true
-        WorkGuard.isBusy = true
-        progress.reset()
         errorMessage = ""
-
-        let summaries: [VoiceRoleSummary] = buildVoiceSummaries(result: result, voices: voices)
-        let report: ProgressHandler = progress.handler(scale: 1, offset: 0)
-        // задача заводится здесь, а не внутри await: иначе между нажатием кнопки и появлением
-        // ссылки на неё остаётся промежуток, в котором отменять нечего
-        let work: Task<String, Error> = Task.detached(priority: .userInitiated) {
-            var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: exportSubtitle.sourcePath)
-            return try DocxExporter.export(
-                subtitle: exportSubtitle,
-                outputFolder: exportFolder,
-                digest: exportDigest,
-                language: exportLanguage,
-                paths: &paths,
-                roleHighlights: result.roleToHighlight,
-                voiceSummaries: summaries,
-                fileSuffix: suffix,
-                progress: report
-            )
-        }
-        exportTask = work
-
+        didCancel = false
         Task {
-            do {
-                let path: String = try await work.value
-                finishExport()
-                onComplete(path, result)
-                dismiss()
-            } catch is CancellationError {
-                // отмену запросил сам пользователь: показывать её как ошибку незачем
-                finishExport()
-            } catch {
-                finishExport()
-                errorMessage = L.describe(error, exportLanguage)
-            }
-        }
-    }
-
-    private func finishExport() {
-        exportTask = nil
-        isWorking = false
-        WorkGuard.isBusy = false
-    }
-
-    private func buildVoiceSummaries(result: RoleAssignmentResult, voices: [VoiceConfig]) -> [VoiceRoleSummary] {
-        voices.compactMap { voice in
-            let roles: [String] = result.roleToVoice
-                .filter { item in item.value == voice.id }
-                .map { item in item.key }
-                .sorted { left, right in
-                    left.localizedCaseInsensitiveCompare(right) == .orderedAscending
+            let created: String? = await model.makeRoleAssignment(
+                subtitle: subtitle,
+                digest: digest,
+                voices: setup.voices,
+                roleSettings: roleSettings,
+                outputFolder: outputFolder,
+                language: language
+            )
+            guard let path: String = created else {
+                // причину модель записала в журнал; главное окно закрыто листом, поэтому она нужна здесь
+                if !didCancel {
+                    errorMessage = model.status
                 }
-            if roles.isEmpty {
-                return nil
+                return
             }
-            return VoiceRoleSummary(voice: voice, roles: roles)
+            onComplete(path)
+            dismiss()
         }
     }
 }

@@ -145,7 +145,7 @@ struct RoleRow: View {
                 .help(role)
                 Spacer(minLength: 8)
                 if let voice: Int = voice {
-                    Text("\(L.text("voiceShort", language))\(voice)")
+                    Text(L.format("voiceShort", language, ["n": String(voice)]))
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)

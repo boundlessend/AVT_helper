@@ -50,7 +50,7 @@ struct DismissFooter: View {
 
 /// ход работы: полоса и процент рядом. одинаковы в строке состояния и в листе разролёвки
 struct ProgressReadout: View {
-    @ObservedObject var progress: ProgressBox
+    let progress: ProgressBox
     /// оба места вызова передают только счётчик, поэтому язык подписи берётся оттуда же,
     /// откуда его берут корневые виды
     @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue

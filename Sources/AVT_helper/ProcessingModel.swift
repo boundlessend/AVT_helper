@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// что стало с файлом очереди после прогона
 enum QueueItemState: Equatable, Sendable {
@@ -46,24 +47,25 @@ private struct QueueRunOutcome: Sendable {
 
 /// держит очередь файлов и выполняет тяжёлые импорт и экспорт вне главного потока
 @MainActor
-final class ProcessingModel: ObservableObject {
-    @Published private(set) var queue: [QueuedFile] = []
-    @Published private(set) var selectedFileID: QueuedFile.ID?
+@Observable
+final class ProcessingModel {
+    private(set) var queue: [QueuedFile] = []
+    private(set) var selectedFileID: QueuedFile.ID?
     /// разобранный файл, который показывает монтажный лист
-    @Published private(set) var importedSubtitle: ImportedSubtitle?
+    private(set) var importedSubtitle: ImportedSubtitle?
     /// роли, счётчики и хронометраж показанного файла
-    @Published private(set) var digest: SubtitleDigest = .empty
+    private(set) var digest: SubtitleDigest = .empty
     /// цвет маркера для каждой роли: после импорта автоматический, после разролёвки - цвет назначенного голоса
-    @Published var roleHighlights: [String: WordHighlightColor] = [:]
+    var roleHighlights: [String: WordHighlightColor] = [:]
     /// голос каждой роли после разролёвки: цвет один на голос, поэтому номер нужен, чтобы их различать
-    @Published var roleVoices: [String: Int] = [:]
-    @Published var status: String = ""
-    @Published private(set) var isWorking: Bool = false
+    var roleVoices: [String: Int] = [:]
+    var status: String = ""
+    private(set) var isWorking: Bool = false
     /// отдельный объект, а не поле: тот же счётчик нужен листу разролёвки,
     /// и правило «полоска движется только вперёд» должно жить в одном месте
     let progress: ProgressBox = ProgressBox()
     /// последние сообщения статуса: без журнала ошибка исчезает под следующим же событием
-    @Published private(set) var history: [String] = []
+    private(set) var history: [String] = []
 
     private var cancelCurrentWork: (() -> Void)?
     /// система вправе убить простаивающую программу при выходе из учётной записи,
@@ -171,7 +173,13 @@ final class ProcessingModel: ObservableObject {
                 imported.skippedBlocks == 0
                 ? ""
                 : ", " + L.format("import.skipped", language, ["n": L.plural("count.blocks", language, imported.skippedBlocks)])
-            log(L.plural("count.lines", language, imported.lines.count) + ", \(imported.sourceType.rawValue)" + skipped)
+            let summary: String = L.format(
+                "import.summary", language,
+                [
+                    "lines": L.plural("count.lines", language, imported.lines.count),
+                    "format": imported.sourceType.rawValue,
+                ])
+            log(summary + skipped)
         } catch let cancellation as CancellationError {
             // отменил пользователь: файл остаётся в очереди, а на экране остаётся прежний
             log(L.describe(cancellation, language))
@@ -306,11 +314,78 @@ final class ProcessingModel: ObservableObject {
         return ExportRun(created: created, failed: failed)
     }
 
-    /// разролёвка кладёт готовый файл сама: модели остаётся запомнить его и раскрасить лист
-    func acceptAssignment(path: String, assignment: RoleAssignmentResult, language: AppLanguage) {
-        roleHighlights = assignment.roleToHighlight
-        roleVoices = assignment.roleToVoice
-        log("\(L.text("createdAssignment", language)): \(URL(fileURLWithPath: path).lastPathComponent)")
+    /// пишет DOCX с разролёвкой. занятость, полоса, отмена и журнал те же, что и у прогона очереди,
+    /// поэтому лист разролёвки только зовёт этот метод. nil означает отказ или отмену: причина уже в журнале
+    func makeRoleAssignment(
+        subtitle: ImportedSubtitle,
+        digest: SubtitleDigest,
+        voices: [VoiceConfig],
+        roleSettings: [RoleGenderSetting],
+        outputFolder: String,
+        language: AppLanguage
+    ) async -> String? {
+        let assignment: RoleAssignmentResult
+        do {
+            assignment = try RoleAssignmentService.assignRoles(
+                counts: digest.namedCounts,
+                voices: voices,
+                roleSettings: roleSettings,
+                language: language
+            )
+        } catch {
+            log(L.describe(error, language))
+            return nil
+        }
+
+        beginWork()
+        defer { finishWork() }
+        let summaries: [VoiceRoleSummary] = voiceSummaries(assignment: assignment, voices: voices)
+        let suffix: String = L.text("file.assignmentSuffix", language)
+        let report: ProgressHandler = progress.handler(scale: 1, offset: 0)
+        let work: Task<String, Error> = Task.detached(priority: .userInitiated) {
+            var paths: OutputPathAllocator = OutputPathAllocator(sourcePath: subtitle.sourcePath)
+            return try DocxExporter.export(
+                subtitle: subtitle,
+                outputFolder: outputFolder,
+                digest: digest,
+                language: language,
+                paths: &paths,
+                roleHighlights: assignment.roleToHighlight,
+                voiceSummaries: summaries,
+                fileSuffix: suffix,
+                progress: report
+            )
+        }
+        cancelCurrentWork = { work.cancel() }
+        do {
+            let path: String = try await work.value
+            roleHighlights = assignment.roleToHighlight
+            roleVoices = assignment.roleToVoice
+            log(L.format("createdAssignment", language, ["file": URL(fileURLWithPath: path).lastPathComponent]))
+            return path
+        } catch is CancellationError {
+            log(L.text("cancelled", language))
+            return nil
+        } catch {
+            log(L.describe(error, language))
+            return nil
+        }
+    }
+
+    /// голоса, которым что-то досталось: пустой голос в сводку документа не идёт
+    private func voiceSummaries(assignment: RoleAssignmentResult, voices: [VoiceConfig]) -> [VoiceRoleSummary] {
+        voices.compactMap { voice in
+            let roles: [String] = assignment.roleToVoice
+                .filter { item in item.value == voice.id }
+                .map { item in item.key }
+                .sorted { left, right in
+                    left.localizedCaseInsensitiveCompare(right) == .orderedAscending
+                }
+            if roles.isEmpty {
+                return nil
+            }
+            return VoiceRoleSummary(voice: voice, roles: roles)
+        }
     }
 
     private func forgetInput() {

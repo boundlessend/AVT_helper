@@ -1,9 +1,11 @@
 import Foundation
+import Observation
 
 /// настройки выгрузки, живущие в UserDefaults между запусками:
 /// класс, потому что это доступ к внешнему хранилищу, а не логика приложения
 @MainActor
-final class ExportOptions: ObservableObject {
+@Observable
+final class ExportOptions {
     private enum Key {
         static let ass: String = "exportAss"
         static let srt: String = "exportSrt"
@@ -22,16 +24,16 @@ final class ExportOptions: ObservableObject {
     /// security-scoped bookmark, иначе после перезапуска доступа к папке не будет
     private let defaults: UserDefaults
 
-    @Published var ass: Bool { didSet { defaults.set(ass, forKey: Key.ass) } }
-    @Published var srt: Bool { didSet { defaults.set(srt, forKey: Key.srt) } }
-    @Published var vtt: Bool { didSet { defaults.set(vtt, forKey: Key.vtt) } }
-    @Published var docx: Bool { didSet { defaults.set(docx, forKey: Key.docx) } }
-    @Published var srtFullWithRoles: Bool { didSet { defaults.set(srtFullWithRoles, forKey: Key.srtFullWithRoles) } }
-    @Published var srtSeparateFiles: Bool { didSet { defaults.set(srtSeparateFiles, forKey: Key.srtSeparateFiles) } }
-    @Published var srtSeparateWithRoles: Bool { didSet { defaults.set(srtSeparateWithRoles, forKey: Key.srtSeparateWithRoles) } }
-    @Published var openFolderAfter: Bool { didSet { defaults.set(openFolderAfter, forKey: Key.openFolderAfter) } }
-    @Published var closeAppAfter: Bool { didSet { defaults.set(closeAppAfter, forKey: Key.closeAppAfter) } }
-    @Published var outputFolder: String { didSet { defaults.set(outputFolder, forKey: Key.outputFolder) } }
+    var ass: Bool { didSet { defaults.set(ass, forKey: Key.ass) } }
+    var srt: Bool { didSet { defaults.set(srt, forKey: Key.srt) } }
+    var vtt: Bool { didSet { defaults.set(vtt, forKey: Key.vtt) } }
+    var docx: Bool { didSet { defaults.set(docx, forKey: Key.docx) } }
+    var srtFullWithRoles: Bool { didSet { defaults.set(srtFullWithRoles, forKey: Key.srtFullWithRoles) } }
+    var srtSeparateFiles: Bool { didSet { defaults.set(srtSeparateFiles, forKey: Key.srtSeparateFiles) } }
+    var srtSeparateWithRoles: Bool { didSet { defaults.set(srtSeparateWithRoles, forKey: Key.srtSeparateWithRoles) } }
+    var openFolderAfter: Bool { didSet { defaults.set(openFolderAfter, forKey: Key.openFolderAfter) } }
+    var closeAppAfter: Bool { didSet { defaults.set(closeAppAfter, forKey: Key.closeAppAfter) } }
+    var outputFolder: String { didSet { defaults.set(outputFolder, forKey: Key.outputFolder) } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

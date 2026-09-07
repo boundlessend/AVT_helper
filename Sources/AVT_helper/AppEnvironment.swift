@@ -1,14 +1,16 @@
 import AppKit
 import Foundation
+import Observation
 import UniformTypeIdentifiers
 
 /// «Открыть недавние» ведёт NSDocumentController: он следит за переименованиями файлов,
 /// рисует значки и переживает переустановку, чего свой список в UserDefaults не умеет
 @MainActor
-final class RecentFiles: ObservableObject {
+@Observable
+final class RecentFiles {
     static let shared: RecentFiles = RecentFiles()
 
-    @Published private(set) var urls: [URL] = NSDocumentController.shared.recentDocumentURLs
+    private(set) var urls: [URL] = NSDocumentController.shared.recentDocumentURLs
 
     private init() {}
 

@@ -4,10 +4,10 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @AppStorage(LanguagePreference.storageKey) private var appLanguageRaw: String = LanguagePreference.system.rawValue
-    @StateObject private var model: ProcessingModel = ProcessingModel()
-    @StateObject private var options: ExportOptions = ExportOptions()
-    @ObservedObject private var recent: RecentFiles = .shared
-    @ObservedObject private var updates: UpdateController = .shared
+    @State private var model: ProcessingModel = ProcessingModel()
+    @State private var options: ExportOptions = ExportOptions()
+    private let recent: RecentFiles = .shared
+    private let updates: UpdateController = .shared
     @State private var selectedRoles: Set<String> = []
     @State private var showDoneAlert: Bool = false
     @State private var showRoleAssignment: Bool = false
@@ -216,12 +216,12 @@ struct ContentView: View {
     private var assignmentSheet: some View {
         if let subtitle: ImportedSubtitle = model.importedSubtitle {
             RoleAssignmentView(
+                model: model,
                 subtitle: subtitle,
                 digest: model.digest,
                 outputFolder: options.outputFolder,
                 language: language,
-                onComplete: { path, assignment in
-                    model.acceptAssignment(path: path, assignment: assignment, language: language)
+                onComplete: { path in
                     lastRun = ExportRun(created: [path], failed: 0)
                     showDoneAlert = true
                 }
@@ -558,8 +558,8 @@ struct RolesColumn: View {
 // MARK: - строка состояния
 
 struct StatusBar: View {
-    @ObservedObject var model: ProcessingModel
-    @ObservedObject var progress: ProgressBox
+    let model: ProcessingModel
+    let progress: ProgressBox
     let language: AppLanguage
     /// причина, по которой запуск невозможен: она стоит рядом с кнопкой, а не прячется в подсказке
     let blockReason: String?

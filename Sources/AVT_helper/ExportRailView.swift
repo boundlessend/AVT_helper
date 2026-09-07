@@ -2,8 +2,8 @@ import SwiftUI
 
 /// левый рельс: всё, что задаёт выгрузку, собрано в одном столбце и не спорит с листом за внимание
 struct ExportRailView: View {
-    @ObservedObject var model: ProcessingModel
-    @ObservedObject var options: ExportOptions
+    let model: ProcessingModel
+    @Bindable var options: ExportOptions
     let language: AppLanguage
     let onChooseInput: () -> Void
     let onChooseOutputFolder: () -> Void

@@ -29,7 +29,7 @@ struct SettingsWindow: View {
 /// чтобы условие занятости не разъехалось между ними
 struct UpdateCheckButton: View {
     let language: AppLanguage
-    @ObservedObject private var updates: UpdateController = .shared
+    private let updates: UpdateController = .shared
 
     var body: some View {
         Button(L.text("update.check", language)) {
@@ -41,7 +41,7 @@ struct UpdateCheckButton: View {
 
 struct AboutView: View {
     let language: AppLanguage
-    @ObservedObject private var updates: UpdateController = .shared
+    private let updates: UpdateController = .shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -52,7 +52,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("AVT_helper")
                         .font(.title2.weight(.bold))
-                    Text("\(L.text("version", language)) \(AppInfo.shortVersion) (\(AppInfo.buildLabel))")
+                    Text(L.format("version", language, ["v": AppInfo.shortVersion, "build": AppInfo.buildLabel]))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -136,7 +136,7 @@ struct QAView: View {
 /// как во всех настройках macOS
 struct SettingsView: View {
     @Binding var preferenceRaw: String
-    @ObservedObject private var updates: UpdateController = .shared
+    @Bindable private var updates: UpdateController = .shared
     @State private var showsRelaunch: Bool = false
     /// почему новая копия не запустилась: без этого сообщения неудачный перезапуск
     /// просто закрыл бы программу
