@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The released app did not start at all.** With the manifest on tools-version 6.0 SwiftPM generates a resource accessor that looks for the bundle beside the `.app` rather than inside `Contents/Resources`, so the first localized string killed the process. Locally the fallback path into the build directory hid it. The app looks where the bundle actually is, and the build script now refuses a bundle without translations and starts the app once before calling it done.
 - **A timecode outside the range of an integer killed the app.** Sixteen digits in the hours field overflowed on the way to milliseconds and took the process with them, while a negative component was quietly clamped to zero instead of being refused. Every component is checked before it is converted, and a cue whose end comes before its start is dropped like any other damaged block.
 - **A line made of spaces or tabs did not count as a blank line**, so two cues of an `SRT` or `VTT` file glued into one. Whitespace-only lines separate blocks now.
 - **Lines with the same timecode came out in a different order every run**, which shuffled the parts of a chorus line. When the timecodes match, the source order decides.

@@ -224,10 +224,33 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# ресурсный бандл обязан лежать там, где его ищет программа: без него запуск падает сразу,
+# а собранное приложение выглядит целым
+if [ ! -d "${RESOURCES_DIR}/${APP_NAME}_${APP_NAME}.bundle/ru.lproj" ]; then
+  echo "The resource bundle in Contents/Resources carries no ru.lproj" >&2
+  exit 1
+fi
+
 codesign --force --sign - "${APP_DIR}"
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
 # ad-hoc подпись Gatekeeper отвергает всегда, поэтому вердикт только печатаем
 spctl --assess --type execute --verbose "${APP_DIR}" || true
+
+# на машине с графической сессией собранное приложение проверяется запуском: падение на старте
+# (например ненайденный ресурсный бандл) иначе обнаруживается только у пользователя.
+# на сборочной машине сессии нет, и проверка пропускается
+if [ -z "${CI:-}" ]; then
+  "${MACOS_DIR}/${APP_NAME}" >/dev/null 2>&1 &
+  LAUNCH_PID=$!
+  sleep 4
+  if kill -0 "${LAUNCH_PID}" >/dev/null 2>&1; then
+    kill "${LAUNCH_PID}" >/dev/null 2>&1 || true
+    wait "${LAUNCH_PID}" 2>/dev/null || true
+  else
+    echo "The freshly built app died within four seconds of starting" >&2
+    exit 1
+  fi
+fi
 
 echo "Created ${APP_DIR}"

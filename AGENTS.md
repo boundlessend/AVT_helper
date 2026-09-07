@@ -80,6 +80,8 @@ returns `skippedBlocks`, and the import line in the message log names it through
 and `count.blocks`. A file that quietly loses half of itself looks to the user like a file that
 never had those lines. Added 2026-09-01.
 
+**The resource bundle is found through `Bundle.main.resourceURL`, not `Bundle.module`.** SwiftPM generates an accessor that looks beside the executable's bundle, which for a `.app` means beside the `.app` itself, and the fallback it writes is the build directory of whoever compiled it. That fallback hides the failure on the machine that built the app and breaks it everywhere else. `scripts/build_app.sh` refuses a bundle without `ru.lproj` and launches the app once before reporting success. Added 2026-09-07, after 1.8.0 shipped an app that died on the first localized string.
+
 **Every user-visible change gets a `CHANGELOG.md` entry under `## [Unreleased]` in the same
 commit.** The release workflow refuses to build a DMG when the tag has no matching
 `## [MAJOR.MINOR.PATCH]` heading, and that heading is produced by renaming `## [Unreleased]`.

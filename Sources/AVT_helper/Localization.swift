@@ -84,13 +84,25 @@ enum L {
         return result + rest
     }
 
+    /// ресурсный бандл SwiftPM. в собранном .app он лежит в Contents/Resources, а сгенерированный
+    /// Bundle.module ищет его рядом с самим .app и падает с fatalError, поэтому сначала смотрим туда,
+    /// куда бандл действительно кладёт сборочный скрипт, и лишь потом обращаемся к Bundle.module,
+    /// которым пользуются тесты и отладочные прогоны
+    private static let resources: Bundle = {
+        let name: String = "AVT_helper_AVT_helper.bundle"
+        if let url: URL = Bundle.main.resourceURL?.appendingPathComponent(name), let bundle: Bundle = Bundle(url: url) {
+            return bundle
+        }
+        return Bundle.module
+    }()
+
     /// язык выбирается в самой программе, поэтому нужен именно бандл нужной локали,
     /// а не тот, который подобрала бы система
     static func bundle(_ language: AppLanguage) -> Bundle {
-        guard let path: String = Bundle.module.path(forResource: language.rawValue, ofType: "lproj"),
+        guard let path: String = resources.path(forResource: language.rawValue, ofType: "lproj"),
             let bundle: Bundle = Bundle(path: path)
         else {
-            return Bundle.module
+            return resources
         }
         return bundle
     }
