@@ -11,10 +11,10 @@ cannot be checked without subjective judgement does not belong in this file.
 | | |
 |---|---|
 | Product | `AVT_helper`, a native macOS subtitle converter and DOCX role-table generator |
-| Language | Swift 5.9, SwiftUI, AppKit where SwiftUI has no equivalent |
+| Language | Swift 6, SwiftUI, AppKit where SwiftUI has no equivalent |
 | Build system | SwiftPM only. There is no Xcode project and none should be added |
 | Platform | macOS 14+, `defaultLocalization: "ru"`, ships `ru` and `en` |
-| Concurrency | `StrictConcurrency` experimental feature is on |
+| Concurrency | `swift-tools-version: 6.0` and `swiftLanguageMode(.v6)`: a data race is a compile error |
 | Tag scheme | `v.MAJOR.MINOR.PATCH`, with the dot after `v` (`v.1.7.0`) |
 
 ## Commands
@@ -22,7 +22,7 @@ cannot be checked without subjective judgement does not belong in this file.
 Run all three before reporting a change as done.
 
 ```bash
-swift format lint --strict --recursive Sources Tests   # --strict, so a warning fails
+./scripts/lint.sh        # swift format lint --strict, so a warning fails
 swift build -c release
 swift test
 ```
@@ -32,13 +32,14 @@ the release:
 
 ```bash
 ./scripts/build_app.sh   # writes .build/AVT_helper.app, ad-hoc signed
-./scripts/build_dmg.sh   # calls build_app.sh, then hdiutil
+./scripts/build_dmg.sh   # calls build_app.sh, then hdiutil, and mounts the image to check it
 ```
 
 CI additionally guards this file and the changelog: `## [Unreleased]` must exist in
 `CHANGELOG.md`, and every test named in the table below must still exist in `Tests`. Rename a
 test and this file has to be updated with it. The guard reads any word starting with `test` and
-a capital letter, so do not write one in prose unless it is a real test.
+a capital letter, so do not write one in prose unless it is a real test. It also refuses a file
+that names fewer than ten of them: an emptied table would leave the guard checking nothing.
 
 ## Conventions
 
@@ -70,9 +71,14 @@ silent pile of files somewhere nobody will look. Added 2026-08-16.
 so it grows monotonically, and the copyright year is the date of the last commit. Rebuilding an
 old tag must produce the same bundle. Do not replace either with `date`. Added 2026-08-12.
 
-**Strict concurrency warnings get fixed, not silenced.** No `@unchecked Sendable` to quiet the
-compiler. The feature is on so that these become errors on our terms rather than Swift's.
-Added 2026-08-12.
+**Concurrency violations get fixed, not silenced.** No `@unchecked Sendable` to quiet the
+compiler. The Swift 6 language mode is on, so these are errors and there is nothing to postpone.
+Added 2026-08-12, tightened 2026-09-01 when the experimental flag became the language mode.
+
+**A block the importer could not parse is counted and the count reaches the user.** The parser
+returns `skippedBlocks`, and the import line in the message log names it through `import.skipped`
+and `count.blocks`. A file that quietly loses half of itself looks to the user like a file that
+never had those lines. Added 2026-09-01.
 
 **Every user-visible change gets a `CHANGELOG.md` entry under `## [Unreleased]` in the same
 commit.** The release workflow refuses to build a DMG when the tag has no matching
@@ -96,7 +102,18 @@ decision, never by relaxing the test that guards it.
 | Every role of a chorus line keeps its own colour | `testChorusLineKeepsColorOfEveryRole`, `testAssKeepsEveryRoleOfAChorusLine` |
 | A file name is truncated on a character boundary to `AppLimits.maxFileNameBytes` | `testLongRoleNameStillWrites` |
 | DOCX stays valid XML with control characters in the text | `testDocxStaysValidXmlWithControlCharacters` |
-| Both languages carry the same keys and the same plural keys | `testBothLanguagesCarryTheSameKeys`, `testBothLanguagesCarryTheSamePluralKeys` |
+| Both languages carry the same keys, the same plural keys and the same placeholders | `testBothLanguagesCarryTheSameKeys`, `testBothLanguagesCarryTheSamePluralKeys`, `testBothLanguagesUseTheSamePlaceholders` |
+| A placeholder is substituted once, never into text another value inserted | `testFormatSubstitutesEachPlaceholderOnce` |
+| SRT and VTT survive the round trip: escaping, an empty line inside a cue, a line with no role | `testSrtAndVttRoundTrip` |
+| A queue run gives every file its own roles and colours | `testExportQueueUsesOwnRolesForEachFile` |
+| The output folder is refused unless it exists, is a directory and is writable | `testOutputFolderRejectsUnusablePaths` |
+| A failure mid-run reports the files already written | `testPartialExportKeepsFilesWrittenBeforeFailure` |
+| An oversized file and a directory are refused before the parser runs | `testImportRejectsOversizedAndNonRegularFile` |
+| SRP is decoded by its declared encoding, and a DOCTYPE is refused before the parser expands it | `testSrpInWindows1251KeepsRoles`, `testSrpRejectsDoctypeBeforeParsing` |
+| A blank line carrying whitespace still separates two cues | `testSpacedBlankLineSplitsSrtBlocks` |
+| ASS export keeps `Layer`, the margins and `Effect` of the source line | `testAssExportKeepsLayerMarginsAndEffect` |
+| The assembled file name fits the file system limit, base and role together | `testLongBaseAndRoleFitFileNameLimit` |
+| Thousands of lines export to every format in one run | `testLargeFileExportsEveryFormat` |
 
 Known ceiling: `testEveryKeyUsedInCodeExists` finds keys with a regular expression, so keys held
 in tables such as `[("qa.q1", "qa.a1")]` are invisible to it. The check is one-directional and

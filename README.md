@@ -16,7 +16,8 @@
   <a href="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/boundlessend/AVT_helper/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/boundlessend/AVT_helper/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/boundlessend/AVT_helper?color=2563eb"></a>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-14%2B-111827">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9-f05138">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-111827">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-6.0-f05138">
   <img alt="licence" src="https://img.shields.io/badge/license-BSD--3--Clause-2563eb">
 </p>
 
@@ -30,18 +31,25 @@ Input encoding (UTF-8, UTF-16, Windows-1251) is detected automatically. Import a
 
 ## Install
 
-1. Download `AVT_helper.dmg` from the latest release.
-2. Open `AVT_helper.dmg`.
-3. Drag `AVT_helper.app` to `Applications`.
-4. The build is signed but not notarized, so Gatekeeper blocks the first launch. Open it this way once: **right click** (or Control-click) the app in `Applications` and choose **Open**, then confirm in the dialog. If macOS still refuses, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+Requirements: macOS 14 or newer on Apple Silicon. Intel Macs are not supported.
 
-After the first launch macOS remembers the choice and opens the app normally.
+1. Download `AVT_helper.dmg` and `AVT_helper.dmg.sha256` from the latest release.
+2. The build is not notarized, so the checksum is the only proof the image arrived whole. Check it in Terminal, from the folder that holds both files:
 
-If the app is reported as damaged, the quarantine flag is the cause. Clear it once in Terminal, without `sudo`: the app belongs to you after the copy.
+   ```bash
+   shasum -c AVT_helper.dmg.sha256
+   ```
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/AVT_helper.app"
-```
+   The answer has to be `AVT_helper.dmg: OK`.
+3. Open `AVT_helper.dmg` and drag `AVT_helper.app` to `Applications`.
+4. The app is signed ad-hoc and deliberately not notarized, so macOS puts a quarantine flag on it and the first launch fails, sometimes with a claim that the app is damaged. Clear the flag once in Terminal, without `sudo`: after the copy the app belongs to you.
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/AVT_helper.app"
+   ```
+5. Without Terminal there is a second path: launch the app, let macOS refuse it, then open **System Settings -> Privacy & Security**, scroll to the message about `AVT_helper` and click **Open Anyway**. Recent macOS releases do not always offer that button for an ad-hoc signature, and then step 4 is the only way in.
+
+Once the flag is gone macOS opens the app normally.
 
 ## Usage
 
@@ -62,7 +70,7 @@ Drop or open several files at once and they queue up in the left rail. `Start` r
 
 ### What ASS export keeps
 
-The `[Script Info]` and `[V4+ Styles]` blocks of the source file are carried over, so style names still resolve and the frame size survives. Inline override tags inside a line (`{\i1}` and the like) are dropped at import: the window shows a dubbing sheet, not typesetting. Lines whose style is not declared in the file fall back to `Default` rather than pointing at a style that does not exist.
+The `[Script Info]` and `[V4+ Styles]` blocks of the source file are carried over, so style names still resolve and the frame size survives. Inline override tags inside a line (`{\i1}` and the like) are dropped at import: the window shows a dubbing sheet, not typesetting. Lines whose style is not declared in the file fall back to `Default` rather than pointing at a style that does not exist. A `[V4 Styles]` block from an `SSA` source is converted to v4+, because the exported events are v4+.
 
 ## DOCX Output
 

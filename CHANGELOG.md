@@ -8,38 +8,77 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **ASS export pointed at styles that were not in the file.** The `[Script Info]` and `[V4+ Styles]` blocks of the source are now carried over, so style names resolve and the frame size survives the round trip. A line whose style is not declared falls back to `Default` instead of naming a style no player can find.
-- **An interrupted import threw away the file already on screen.** Cancelling or failing to read a second file now leaves the first one loaded.
-- **A failed export said nothing about the files it had already written.** The error names them and they are listed in the completion alert.
+- **A timecode outside the range of an integer killed the app.** Sixteen digits in the hours field overflowed on the way to milliseconds and took the process with them, while a negative component was quietly clamped to zero instead of being refused. Every component is checked before it is converted, and a cue whose end comes before its start is dropped like any other damaged block.
+- **A line made of spaces or tabs did not count as a blank line**, so two cues of an `SRT` or `VTT` file glued into one. Whitespace-only lines separate blocks now.
+- **Lines with the same timecode came out in a different order every run**, which shuffled the parts of a chorus line. When the timecodes match, the source order decides.
+- **An `SRP` that declares `windows-1251` in its prolog arrived as mojibake.** The text had already been decoded by then, and the parser read those bytes a second time according to the declaration. The declaration is removed before parsing.
+- **Part of a file could be lost in silence.** Blocks the importer could not parse are counted, and the number is reported next to the number of lines, so a half-read file no longer looks like a file that never had those lines.
+- **ASS export pointed at styles that were not in the file.** The `[Script Info]` and `[V4+ Styles]` blocks of the source are now carried over, so style names resolve and the frame size survives the round trip. A line whose style is not declared falls back to `Default` instead of naming a style no player can find, and a `[V4 Styles]` block of an `SSA` source is converted to v4+ rather than left beside v4+ events.
+- **The `Format:` line of `[Events]` was ignored** and the field order assumed. A file that declares its own order now imports correctly, and an order that does not end with `Text` is refused with a message instead of importing shifted fields.
+- **`ASS` export replaced `Layer`, the margins and `Effect` with zeros**, so positioned signs and karaoke lost what held them in place. The values of the source line are written back.
+- **A backslash or a curly brace in the dialogue did not survive the round trip.** Both are escaped on the way out and unescaped on the way in, in one pass, so `\\n` from an escaped backslash is no longer read as a line break.
+- **`WebVTT` text went out unescaped.** An ampersand, an angle bracket or a stray `-->` inside a line produced a file that players read as markup.
+- **A blank line inside a line of dialogue split the block.** The `\N\N` of the source ended the cue early, and everything after it silently disappeared when the file was read back.
+- **The `Unassigned` label travelled into the exported text** and came back from the next import as a real role with that name.
+- **An interrupted write left a truncated file under a name that was already taken.** Subtitles and DOCX go to a temporary file beside the target and are renamed into place, so a name holds either a whole file or no file at all.
+- **A very long role name broke the export mid-run** by producing a file name past the file system limit. The assembled name is truncated on a character boundary with room left for the extension and the numbered suffix, and an export that cannot find a free name after a thousand tries says so instead of trying forever.
+- **Separate `SRT` files with nothing to write reported the wrong reason.** An export whose only format is separate files by role, with no selected role that has any lines, said that no format was selected. It now names the roles as the cause.
+- **DOCX broke the rules of its own format.** The children of `w:rPr` went out in an order the schema does not allow, the table header did not repeat when the table crossed a page, the document declared no language so Word spell-checked Russian lines against the wrong dictionary, and every archive entry carried an impossible MS-DOS date of month zero and day zero.
+- **An interrupted import threw away the file already on screen.** Cancelling or failing to read a second file leaves the first one loaded, a cancelled import keeps its file in the queue, and after a failed import the selection points at the file that is actually on screen instead of one that has been removed.
+- **A failed export said nothing about the files it had already written.** The error names them and they are listed in the completion alert; a cancelled run reports them the same way instead of losing the whole account of itself.
 - **DOCX carried no role colors unless a role assignment had been made**, although the window showed them and the README promised the two would match. The colors of the sheet now reach every DOCX.
 - **A line spoken by several characters was highlighted with one color.** Every role of a chorus line keeps the color of its own voice.
 - **UTF-16 files without a byte order mark decoded into text full of holes**, because a zero byte is valid UTF-8. Encodings are now sniffed and each candidate is inspected before it is accepted; a file that decodes into nothing readable is refused instead of arriving as a file with no dialogue lines.
-- **A very long role name broke the export mid-run** by producing a file name past the file system limit. Names are truncated on a character boundary.
-- **The `Format:` line of `[Events]` was ignored** and the field order assumed. A file that declares its own order now imports correctly.
-- Russian counts had a single form everywhere: "1 реплик", "2 реплик". Numbers of lines, roles and files now decline properly through `.stringsdict`.
+- **`Cmd+Q` in the middle of a run killed the writing.** Quitting while files are being written asks first, and the answer that keeps working is the default one.
+- **Dropping a file while the app was busy broke the `Cancel` button.** Every way in - the menu, the panel and the drop zone - refuses while a run is going and says why.
+- **The panel for choosing files blocked the whole app** while it was open. It is a sheet now, and one `Cmd+O` opens one panel however many windows are around.
+- **Switching the interface language wiped a finished role assignment.** Only the `Unassigned` label is renamed, and the voices and colors move with it.
+- **The role assignment could not be stopped while it wrote the DOCX.** The same `Cancel` button stops the writing first and closes the sheet after.
+- **A relaunch after a language change quit before the new copy had started**, so a failed launch left no app at all. It waits for the new copy, and a failure is reported in the settings window.
+- **The role checkboxes still held the roles of the previous file** after another file of the queue was selected, and an export of separate files by role found nothing to write. They follow the file on screen.
+- **The ninth role was painted with the color of the first.** Eight highlight colors is the whole palette, so roles past the eighth get no color rather than one that cannot be told apart.
+- **The `Unassigned` label took a voice and a color of its own in the role assignment**, although it is a substituted label rather than a role. It is left out, as it already was in the automatic coloring.
+- **A missing translation reached the user as the raw key.** The assertion meant to catch it is stripped from a release build, so the text of the other language is shown instead, and a placeholder is no longer substituted into text that another value had just inserted.
+- **An output folder without write permission passed the check** and the run failed halfway through with a raw Cocoa error. Writability is part of the check.
+- **The role prefix setting switched separate `SRT` files back on at every launch**, undoing the checkbox the user had cleared. The nested setting is switched off instead of reviving its parent.
+- **The status bar showed a hint about the message log where the message belonged.** A status trimmed to two lines is readable in full on hover.
+- Russian counts had a single form everywhere: "1 реплик", "2 реплик". Numbers of lines, roles, files and skipped blocks now decline properly through `.stringsdict`.
 - The file size in the too-large error is stated in megabytes rather than bytes.
 - Voices could be raised to twelve while only eight highlight colors exist, so the duplicate-color warning could not be dismissed. Eight is the ceiling.
 - `Cmd+Return` was declared twice, on the `Start` button and on its menu item, and the two competed for the keystroke. The menu item owns it.
-- DOCX files no longer carry the author of the program in their properties.
+- DOCX files no longer carry the author of the program or the name of the producing application in their properties: `docProps/app.xml` is not written at all.
 
 ### Changed
 
 - **A queue of files.** Several files can be opened or dropped at once; `Start` runs the whole queue with the same export settings and marks each file with what came of it. The sheet shows the file you pick. Role assignment stays per file.
+- **The queue is a list rather than a stack of buttons.** The selection moves with the arrow keys, `Delete` removes the selected file, and the state of each file is spoken by VoiceOver instead of being carried by the color of an icon alone.
 - **The app language now moves the menus with it.** The choice is written to `AppleLanguages`, and the app offers to relaunch so that menus, the open panel and system buttons speak the same language as the window. A third option, `Same as system`, was added.
 - `Start` and `Make role assignment` are in a `Process` menu with keyboard shortcuts, `Check for Updates…` is in the app menu, `Q&A` moved to the `Help` menu, and the `Window` menu can bring the main window back after it has been closed.
-- The app checks for a new version once a week in the background, with a switch in settings. It still downloads nothing by itself.
+- `Open Recent` lists the files the app has opened, with `Clear Menu` at the bottom. The list is the system one kept by `NSDocumentController`, so it follows a renamed file and survives a reinstall. It starts empty once, because the old list was private to the app.
+- The app checks for a new version once a week in the background, with a switch in settings. The request carries an `ETag`, a `User-Agent` and a timeout, so an unchanged release costs nothing against the hourly limit of GitHub; a check that fails counts as an attempt and is retried in an hour rather than on every launch, and a secondary rate limit is recognized as one. It still downloads nothing by itself.
 - The settings window is a grouped form with the title drawn by the system, as macOS settings are.
 - Columns of the main window are draggable, so the dialogue column is no longer squeezed by two fixed rails.
 - The status bar names why `Start` is unavailable instead of hiding it in a tooltip, and the message log behind it is marked with an icon.
 - The role checkboxes are disabled unless separate files by role are on, and the hint says so.
-- `Open Recent` is the system menu from `NSDocumentController`, with icons and `Clear Menu`. The list starts empty once, because the old one was kept privately.
-- Voices of a role assignment persist between runs, roles can be set to one gender in a click, and the sheet's buttons sit at the bottom with `Cancel` on Escape.
+- The output folder is applied when editing of the path ends, not on every keystroke.
+- Voices of a role assignment persist between runs, roles can be set to one gender in a click, and the sheet's buttons sit at the bottom with `Cancel` on Escape. A source that carries no gender of its own, which is everything but `SRP`, gets male and female by turns instead of a cast that is male to the last role.
+- Gender names and the names of the highlight colors follow the app language.
 - The export format buttons use the system accent color, and text set in capitals is styled rather than uppercased, so VoiceOver reads names as names.
 - Dropping a file the app cannot read no longer highlights the drop zone first and complains after.
-- The bundle declares its subtitle types properly (`LSItemContentTypes` and imported UTIs), carries a real copyright string, and no longer allows sudden termination while files are being written.
+- Subtitles and DOCX are written to disk as they are built, so a long file no longer exists twice: once as text in memory and once on disk.
+- The bundle declares its subtitle types properly (`LSItemContentTypes` and imported UTIs, `SRT` among them), carries a real copyright string, explains in the system prompt why it wants the Desktop, Documents and Downloads folders, takes its minimum system version from `Package.swift`, and no longer allows sudden termination while files are being written.
 - The controls that appeared in more than one place - `Close`, `Check for Updates…`, the section headers and the progress readout - are one view each, so the copies can no longer drift apart.
-- The design mockups moved to `docs/design`.
+- The package is `swift-tools-version: 6.0` and the app is built in the Swift 6 language mode, so a concurrency violation is a compile error instead of a warning.
+- The disk image carries the version in its volume name and is mounted and inspected right after it is built, so a broken image fails on the build machine rather than on somebody's desk.
+- CI builds and tests on macOS 14 as well as macOS 15, lints through `scripts/lint.sh` with the rules written down instead of taken from whatever `swift-format` was at hand, and pins every action to a commit. The release build checks the version inside the bundle against the tag and refuses a bundle that is not marked as a release.
 - The SwiftPM cache step was dropped from CI: there are no dependencies to cache.
+- `run_app.command` quits a running copy before it starts the freshly built one, because `open` would only bring the old one forward.
+
+### Security
+
+- **The update check opened whatever address the answer named.** The page address arrived over the network and went to the system opener as it was, in any scheme it liked, `file://` included. Only `https` on `github.com` and its subdomains is opened now.
+- **A small `SRP` could expand into gigabytes of memory before it was refused.** Internal entities were expanded while the document was being constructed, and the check for a `DTD` ran only after that. The `DOCTYPE` is found in the text first, so an expansion bomb never reaches the parser.
+- The release workflow no longer leaves its token in `.git/config` where every later step of the build could read it, and write permission is granted to the job that publishes the release instead of to the whole workflow.
 
 ## [1.7.0] - 2026-08-12
 
