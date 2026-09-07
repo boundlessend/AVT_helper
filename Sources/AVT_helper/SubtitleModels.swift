@@ -174,6 +174,12 @@ struct SubtitleDigest: Sendable {
 
     static let empty: SubtitleDigest = SubtitleDigest(roles: [], counts: [:], lineCount: 0, duration: 0, placeholder: nil)
 
+    /// счётчики без подставленной метки «нет роли»: голос и цвет ей не полагаются,
+    /// поэтому разролёвка считает только по названным ролям
+    var namedCounts: [String: Int] {
+        counts.filter { role, _ in role != placeholder }
+    }
+
     /// доля реплик роли от всего файла: она же длина полоски в списке ролей
     func share(of role: String) -> Double {
         lineCount == 0 ? 0 : Double(counts[role, default: 0]) / Double(lineCount)

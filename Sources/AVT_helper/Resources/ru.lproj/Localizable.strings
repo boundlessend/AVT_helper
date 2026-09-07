@@ -18,7 +18,7 @@
 "color.magenta" = "Розовый";
 "color.red" = "Красный";
 "color.yellow" = "Желтый";
-"createdAssignment" = "Создана разролёвка";
+"createdAssignment" = "Создана разролёвка: {file}";
 "createdFiles" = "Создано";
 "docx.roleStats" = "Статистика по ролям";
 "done" = "Готово!";
@@ -29,10 +29,10 @@
 "error.assFieldOrder" = "Строка Format блока [Events] задаёт неподдерживаемый порядок полей: поле Text должно быть последним.";
 "error.cannotPickVoice" = "Не удалось выбрать голос для роли «{r}».";
 "error.decodeFailed" = "Не удалось определить кодировку файла.";
-"error.exportPrefix" = "Ошибка экспорта";
+"error.exportPrefix" = "Ошибка экспорта: {message}";
 "error.fileTooLarge" = "Файл слишком большой: {size}. Максимум: {max}.";
-"error.importPrefix" = "Ошибка импорта";
-"error.invalidTime" = "Не удалось разобрать таймкод";
+"error.importPrefix" = "Ошибка импорта: {message}";
+"error.invalidTime" = "Не удалось разобрать таймкод: {value}";
 "error.noFormatSelected" = "Не выбран ни один формат экспорта.";
 "error.noInputSelected" = "Сначала выберите исходный файл.";
 "error.noLines" = "В файле не найдено ни одной реплики.";
@@ -42,7 +42,7 @@
 "error.notRegularFile" = "Источник не является обычным файлом: {path}";
 "error.partialExport" = "{cause} Успели записаться: {files}.";
 "error.tooManySimilarNames" = "В папке слишком много файлов с таким именем. Освободите имя или выберите другую папку.";
-"error.unsupportedFormat" = "Неподдерживаемый формат файла";
+"error.unsupportedFormat" = "Неподдерживаемый формат файла: {path}";
 "error.updateFailed" = "Не удалось проверить обновления (HTTP {code}).";
 "error.updateInvalidResponse" = "Не удалось разобрать ответ сервера обновлений.";
 "error.updateRateLimited" = "GitHub временно отклоняет проверки обновлений с этого адреса. Попробуйте через час.";
@@ -64,6 +64,7 @@
 "history.empty" = "Пока пусто.";
 "history.hint" = "Нажмите, чтобы открыть журнал сообщений";
 "import.skipped" = "не разобрано: {n}";
+"import.summary" = "{lines}, {format}";
 "inputFile" = "Исходный файл";
 "makeRoleAssignment" = "Сделать разролёвку";
 "menu.mainWindow" = "Главное окно";
@@ -130,9 +131,9 @@
 "update.check" = "Проверить обновления…";
 "update.download" = "Скачать";
 "update.latest" = "У вас последняя версия.";
-"version" = "Версия";
-"voice" = "Голос";
+"version" = "Версия {v} ({build})";
+"voice" = "Голос {n}";
 "voiceCount" = "Количество голосов";
-"voiceShort" = "Г";
+"voiceShort" = "Г{n}";
 "voices" = "Голоса";
 "warning.duplicateColors" = "Разным голосам назначен одинаковый цвет выделения: в документе их будет не отличить.";

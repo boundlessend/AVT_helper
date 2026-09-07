@@ -13,15 +13,15 @@ enum SubtitleError: Error {
     func message(_ language: AppLanguage) -> String {
         switch self {
         case .tooManySimilarNames:
-            return "\(L.text("error.exportPrefix", language)): \(L.text("error.tooManySimilarNames", language))"
+            return L.format("error.exportPrefix", language, ["message": L.text("error.tooManySimilarNames", language)])
         case .unsupportedFormat(let path):
-            return "\(L.text("error.unsupportedFormat", language)): \(path)"
+            return L.format("error.unsupportedFormat", language, ["path": path])
         case .invalidTime(let value):
-            return "\(L.text("error.invalidTime", language)): \(value)"
+            return L.format("error.invalidTime", language, ["value": value])
         case .importFailed(let message):
-            return "\(L.text("error.importPrefix", language)): \(message)"
+            return L.format("error.importPrefix", language, ["message": message])
         case .exportFailed(let message):
-            return "\(L.text("error.exportPrefix", language)): \(message)"
+            return L.format("error.exportPrefix", language, ["message": message])
         }
     }
 }

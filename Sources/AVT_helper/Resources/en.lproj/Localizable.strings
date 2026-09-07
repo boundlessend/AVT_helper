@@ -18,7 +18,7 @@
 "color.magenta" = "Pink";
 "color.red" = "Red";
 "color.yellow" = "Yellow";
-"createdAssignment" = "Role assignment created";
+"createdAssignment" = "Role assignment created: {file}";
 "createdFiles" = "Created";
 "docx.roleStats" = "Role statistics";
 "done" = "Done!";
@@ -29,10 +29,10 @@
 "error.assFieldOrder" = "The Format line of the [Events] block declares an unsupported field order: Text must come last.";
 "error.cannotPickVoice" = "Could not pick a voice for role {r}.";
 "error.decodeFailed" = "Could not detect the file encoding.";
-"error.exportPrefix" = "Export error";
+"error.exportPrefix" = "Export error: {message}";
 "error.fileTooLarge" = "File is too large: {size}. Maximum: {max}.";
-"error.importPrefix" = "Import error";
-"error.invalidTime" = "Could not parse timecode";
+"error.importPrefix" = "Import error: {message}";
+"error.invalidTime" = "Could not parse timecode: {value}";
 "error.noFormatSelected" = "No export format selected.";
 "error.noInputSelected" = "Select a source file first.";
 "error.noLines" = "The file contains no dialogue lines.";
@@ -42,7 +42,7 @@
 "error.notRegularFile" = "Source is not a regular file: {path}";
 "error.partialExport" = "{cause} Written before it stopped: {files}.";
 "error.tooManySimilarNames" = "Too many files with this name in the folder. Free the name or pick another folder.";
-"error.unsupportedFormat" = "Unsupported file format";
+"error.unsupportedFormat" = "Unsupported file format: {path}";
 "error.updateFailed" = "Update check failed (HTTP {code}).";
 "error.updateInvalidResponse" = "Could not parse the update server response.";
 "error.updateRateLimited" = "GitHub is refusing update checks from this address for now. Try again in an hour.";
@@ -64,6 +64,7 @@
 "history.empty" = "Nothing yet.";
 "history.hint" = "Click to open the message log";
 "import.skipped" = "skipped: {n}";
+"import.summary" = "{lines}, {format}";
 "inputFile" = "Input file";
 "makeRoleAssignment" = "Make role assignment";
 "menu.mainWindow" = "Main Window";
@@ -130,9 +131,9 @@
 "update.check" = "Check for Updates…";
 "update.download" = "Download";
 "update.latest" = "You have the latest version.";
-"version" = "Version";
-"voice" = "Voice";
+"version" = "Version {v} ({build})";
+"voice" = "Voice {n}";
 "voiceCount" = "Voice count";
-"voiceShort" = "V";
+"voiceShort" = "V{n}";
 "voices" = "Voices";
 "warning.duplicateColors" = "Several voices share one highlight color and will look identical in the document.";

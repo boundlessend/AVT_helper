@@ -171,18 +171,6 @@ enum SubtitleExporter {
         return created
     }
 
-    static func exportAss(
-        subtitle: ImportedSubtitle,
-        outputFolder: String,
-        language: AppLanguage,
-        paths: inout OutputPathAllocator
-    ) throws -> String {
-        let path: String = try paths.reserve(folder: outputFolder, name: TextTools.safeFileName(subtitle.baseName), fileExtension: "ass")
-        var counter: ProgressCounter = ProgressCounter(total: subtitle.lines.count, report: { _ in })
-        try writeAss(path: path, subtitle: subtitle, language: language, counter: &counter)
-        return path
-    }
-
     private struct SrtJob {
         let path: String
         let lines: [SubtitleLine]

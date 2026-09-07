@@ -49,8 +49,18 @@ enum DocxExporter {
         try Task.checkCancellation()
         let archive: Data = ZipArchive.archive(entries: entries)
         try Task.checkCancellation()
-        // запись атомарная: оборванная оставила бы обрезанный docx под уже занятым именем
-        try archive.write(to: URL(fileURLWithPath: path), options: .atomic)
+        // запись идёт во временный файл рядом, а на место встаёт переименованием: оборванная запись
+        // не оставит обрезанный docx, а появившийся тем временем чужой файл не будет затёрт,
+        // потому что moveItem на занятое имя падает, а не перезаписывает
+        let target: URL = URL(fileURLWithPath: path)
+        let temp: URL = target.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).tmp")
+        do {
+            try archive.write(to: temp, options: .atomic)
+            try FileManager.default.moveItem(at: temp, to: target)
+        } catch {
+            try? FileManager.default.removeItem(at: temp)
+            throw error
+        }
         // придержанный в documentXml шаг: полоса доходит до конца, когда файл уже на диске.
         // отмена здесь уже ничего не отменяет, а вызывающий счёл бы записанный файл несозданным
         counter.finish()
@@ -142,7 +152,7 @@ enum DocxExporter {
     }
 
     private static func voiceSummaryParagraph(_ summary: VoiceRoleSummary, language: AppLanguage) -> String {
-        let voiceTitle: String = "\(L.text("voice", language)) \(summary.voice.id)"
+        let voiceTitle: String = L.format("voice", language, ["n": String(summary.voice.id)])
         let roleList: String = summary.roles.joined(separator: ", ")
         let tail: String = " \(summary.voice.gender.shortTitle(language)) - \(roleList)"
         let titleRun: String = run(voiceTitle, bold: false, fontSize: "22", highlight: summary.voice.color, language: language)

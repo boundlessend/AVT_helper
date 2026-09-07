@@ -34,12 +34,10 @@ enum L {
     }
 
     /// размер файла человеческими единицами: байты в сообщении об ошибке никто не читает.
-    /// единицы берёт локаль системы, и после смены языка с перезапуском она совпадает с выбранной
-    static func fileSize(_ bytes: UInt64) -> String {
-        let formatter: ByteCountFormatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
-        return formatter.string(fromByteCount: Int64(bytes))
+    /// ByteCountFormatter локаль не принимает и берёт системную, поэтому единицы считает
+    /// ByteCountFormatStyle: он принимает выбранный в программе язык и не требует перезапуска
+    static func fileSize(_ bytes: UInt64, _ language: AppLanguage) -> String {
+        return bytes.formatted(.byteCount(style: .file).locale(Locale(identifier: language.rawValue)))
     }
 
     /// текст любой ошибки приложения на выбранном языке
