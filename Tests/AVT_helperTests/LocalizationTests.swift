@@ -30,6 +30,29 @@ final class LocalizationTests: XCTestCase {
         XCTAssertTrue(en.values.allSatisfy { value in !value.isEmpty })
     }
 
+    /// имена плейсхолдеров {token} в строке перевода
+    private func placeholders(_ value: String) throws -> Set<String> {
+        let pattern: NSRegularExpression = try NSRegularExpression(pattern: #"\{([^{}]*)\}"#)
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        return Set(
+            pattern.matches(in: value, range: range).compactMap { match in
+                Range(match.range(at: 1), in: value).map { range in String(value[range]) }
+            })
+    }
+
+    /// L.format подставляет значения по имени токена, поэтому потерянный при переводе {token}
+    /// доходит до пользователя как «{v}» в тексте, а лишний остаётся в строке навсегда
+    func testBothLanguagesUseTheSamePlaceholders() throws {
+        let ru: [String: String] = try table(.ru)
+        let en: [String: String] = try table(.en)
+
+        for key in ru.keys.sorted() {
+            let source: Set<String> = try placeholders(XCTUnwrap(ru[key]))
+            let translation: Set<String> = try placeholders(XCTUnwrap(en[key]))
+            XCTAssertEqual(source, translation, "разные плейсхолдеры у ключа \(key)")
+        }
+    }
+
     /// русский требует трёх форм, и правило для 11-14 не совпадает с правилом для 1-4.
     /// формы приходят из .stringsdict, а он читается только через бандл нужного языка
     func testPluralFormsFollowTheLanguageRules() {
@@ -99,13 +122,24 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(L.format("update.available", .en, ["v": "1.7.0"]), "Version 1.7.0 is available.")
     }
 
+    /// подстановка идёт одним проходом: подставленное значение само может содержать {token},
+    /// и повторно оно разбираться не должно, а неизвестный токен остаётся в тексте как есть
+    func testFormatSubstitutesEachPlaceholderOnce() {
+        XCTAssertEqual(
+            L.format("update.available", .en, ["v": "{code}", "code": "1.7.0"]),
+            "Version {code} is available."
+        )
+        XCTAssertEqual(L.format("update.available", .en, ["code": "1.7.0"]), "Version {v} is available.")
+    }
+
     func testEveryKeyUsedInCodeExists() throws {
         let known: Set<String> = try Set(table(.ru).keys).union(pluralTable(.ru).keys)
         // граница перед t обязательна, иначе под шаблон попадают Text( и keyboardShortcut(
         let pattern = try NSRegularExpression(pattern: #"(?:L\.text|L\.format|L\.plural|(?<![\w.])t)\(\s*"([\w.]+)""#)
-        let files: [URL] = try FileManager.default
-            .contentsOfDirectory(at: sourcesDirectory, includingPropertiesForKeys: nil)
-            .filter { url in url.pathExtension == "swift" }
+        // обход рекурсивный: файл в новой подпапке иначе молча выпадет из проверки
+        let walker: FileManager.DirectoryEnumerator = try XCTUnwrap(
+            FileManager.default.enumerator(at: sourcesDirectory, includingPropertiesForKeys: nil))
+        let files: [URL] = walker.compactMap { entry in entry as? URL }.filter { url in url.pathExtension == "swift" }
         XCTAssertFalse(files.isEmpty, "исходники приложения не найдены рядом с тестами")
 
         var used: Set<String> = []

@@ -3,6 +3,17 @@ import XCTest
 
 @testable import AVT_helper
 
+/// внешняя утилита завершилась ненулевым кодом: без этой проверки сбой распаковки
+/// выглядит как отсутствие слова в документе
+private struct ToolError: LocalizedError {
+    let tool: String
+    let status: Int32
+
+    var errorDescription: String? {
+        "\(tool) вернул код \(status)"
+    }
+}
+
 /// собирает значения прогресса, приходящие из фонового потока
 private final class Reported: @unchecked Sendable {
     private let lock = NSLock()
@@ -38,6 +49,10 @@ final class CoreTests: XCTestCase {
 
     func testParseRejectsGarbage() {
         XCTAssertThrowsError(try TimeTools.parseSrt("nope"))
+        // часы в двадцать знаков роняли процесс переполнением, а не давали ошибку
+        XCTAssertThrowsError(try TimeTools.parseSrt("99999999999999999999:00:00,000"))
+        XCTAssertThrowsError(try TimeTools.parseSrt("1001:00:00,000"))
+        XCTAssertEqual(TimeTools.formatSrt(1e18), "1000:00:00,000")
     }
 
     func testFractionDigitsAndDotTolerance() throws {
@@ -102,7 +117,8 @@ final class CoreTests: XCTestCase {
 
         let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
 
-        XCTAssertEqual(imported.allRoles(.ru), ["Анна", "Борис"])
+        // порядок ролей задаёт localizedCaseInsensitiveCompare, поэтому сверяется состав, а не список
+        XCTAssertEqual(Set(imported.allRoles(.ru)), ["Анна", "Борис"])
         XCTAssertEqual(imported.lines.first?.text, "Привет, мир & все")
     }
 
@@ -150,8 +166,7 @@ final class CoreTests: XCTestCase {
         let originalData = try Data(contentsOf: sourceUrl)
 
         let imported = try SubtitleImporter.importFile(path: sourceUrl.path, language: .ru)
-        var paths = OutputPathAllocator(sourcePath: imported.sourcePath)
-        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path, language: .ru, paths: &paths)
+        let created = try exportAssOnly(imported, to: dir.path)
 
         XCTAssertEqual(URL(fileURLWithPath: created).lastPathComponent, "movie (1).ass")
         XCTAssertEqual(try Data(contentsOf: sourceUrl), originalData)
@@ -180,15 +195,9 @@ final class CoreTests: XCTestCase {
         let document = try run("/usr/bin/unzip", ["-p", path, "word/document.xml"])
         let xmlPath = dir.appendingPathComponent("document.xml")
         try document.write(to: xmlPath)
-        let lint = Process()
-        lint.executableURL = URL(fileURLWithPath: "/usr/bin/xmllint")
-        lint.arguments = ["--noout", xmlPath.path]
-        lint.standardOutput = Pipe()
-        lint.standardError = Pipe()
-        try lint.run()
-        lint.waitUntilExit()
 
-        XCTAssertEqual(lint.terminationStatus, 0, "document.xml не проходит строгую проверку XML")
+        // xmllint отвечает ненулевым кодом на невалидном XML, и run превращает его в ошибку теста
+        _ = try run("/usr/bin/xmllint", ["--noout", xmlPath.path])
     }
 
     func testSeparateRoleFilesDoNotCollide() throws {
@@ -252,9 +261,7 @@ final class CoreTests: XCTestCase {
                     id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст {в скобках} тут", style: "", effect: "", sex: .unknown)
             ]
         )
-        var paths = OutputPathAllocator(sourcePath: subtitle.sourcePath)
-
-        let created = try SubtitleExporter.exportAss(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+        let created = try exportAssOnly(subtitle, to: dir.path)
         let reimported = try SubtitleImporter.importFile(path: created, language: .ru)
 
         XCTAssertEqual(reimported.lines.first?.text, "текст {в скобках} тут")
@@ -351,9 +358,7 @@ final class CoreTests: XCTestCase {
                 SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна", "Борис"], text: "хором", style: "", effect: "", sex: .unknown)
             ]
         )
-        var paths = OutputPathAllocator(sourcePath: "")
-
-        let created = try SubtitleExporter.exportAss(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+        let created = try exportAssOnly(subtitle, to: dir.path)
         let reimported = try SubtitleImporter.importFile(path: created, language: .ru)
 
         XCTAssertEqual(reimported.lines.first?.roles, ["Анна", "Борис"])
@@ -519,14 +524,8 @@ final class CoreTests: XCTestCase {
             subtitle: subtitle, outputFolder: dir.path, digest: SubtitleDigest(subtitle: subtitle, language: .ru),
             language: .ru, paths: &paths)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = ["-t", path]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0)
+        // unzip -t отвечает ненулевым кодом на битом архиве, и run превращает его в ошибку теста
+        _ = try run("/usr/bin/unzip", ["-t", path])
     }
 
     /// заголовок исходного ASS обязан пережить круг: без него стиль строки Dialogue
@@ -553,8 +552,7 @@ final class CoreTests: XCTestCase {
         try Data(body.utf8).write(to: source)
 
         let imported = try SubtitleImporter.importFile(path: source.path, language: .ru)
-        var paths = OutputPathAllocator(sourcePath: imported.sourcePath)
-        let created = try SubtitleExporter.exportAss(subtitle: imported, outputFolder: dir.path, language: .ru, paths: &paths)
+        let created = try exportAssOnly(imported, to: dir.path)
         let text = try String(contentsOf: URL(fileURLWithPath: created), encoding: .utf8)
 
         XCTAssertTrue(text.contains("Style: Signs,Impact,60"))
@@ -574,9 +572,7 @@ final class CoreTests: XCTestCase {
                 SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "текст", style: "Missing", effect: "", sex: .unknown)
             ]
         )
-        var paths = OutputPathAllocator(sourcePath: "")
-
-        let created = try SubtitleExporter.exportAss(subtitle: subtitle, outputFolder: dir.path, language: .ru, paths: &paths)
+        let created = try exportAssOnly(subtitle, to: dir.path)
         let text = try String(contentsOf: URL(fileURLWithPath: created), encoding: .utf8)
 
         XCTAssertFalse(text.contains("Missing"))
@@ -730,6 +726,353 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(message.contains("2 файла"))
     }
 
+    /// круг через SRT и VTT: обратно читался только ASS, и потери этих двух форматов было не видно
+    func testSrtAndVttRoundTrip() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = ImportedSubtitle(
+            baseName: "circle",
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [
+                // амперсанд и угловые скобки экранируются в VTT и обязаны вернуться теми же
+                SubtitleLine(id: UUID(), start: 1, end: 2, roles: ["Анна"], text: "A & <b> C", style: "", effect: "", sex: .unknown),
+                // роли нет: подставленная метка ушла бы в текст и вернулась бы оттуда настоящей ролью
+                SubtitleLine(id: UUID(), start: 3, end: 4, roles: [], text: "без роли", style: "", effect: "", sex: .unknown),
+                // пустая строка внутри реплики разорвала бы блок, и хвост пропал бы молча
+                SubtitleLine(
+                    id: UUID(), start: 5, end: 6.5, roles: ["Борис"], text: "первая\n\nвторая", style: "", effect: "", sex: .unknown),
+            ]
+        )
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: true, exportDocx: false,
+            srtFullWithRoles: true, srtSeparateFiles: false, srtSeparateWithRoles: false, selectedRoles: [], roleHighlights: [:]
+        )
+
+        let created = try SubtitleExporter.export(
+            subtitle: subtitle, outputFolder: dir.path, settings: settings,
+            digest: SubtitleDigest(subtitle: subtitle, language: .ru), language: .ru)
+
+        XCTAssertEqual(created.count, 2)
+        for path in created {
+            let format = URL(fileURLWithPath: path).pathExtension
+            let text = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+            XCTAssertFalse(text.contains("Не назначено"), format)
+
+            let back = try SubtitleImporter.importFile(path: path, language: .ru)
+            XCTAssertEqual(back.lines.count, 3, format)
+            XCTAssertEqual(back.lines.map { line in line.roles }, [["Анна"], [], ["Борис"]], format)
+            XCTAssertEqual(back.lines.map { line in line.text }, ["A & <b> C", "без роли", "первая\nвторая"], format)
+            let starts = back.lines.map { line in TimeTools.formatSrt(line.start) }
+            let ends = back.lines.map { line in TimeTools.formatSrt(line.end) }
+            XCTAssertEqual(starts, ["00:00:01,000", "00:00:03,000", "00:00:05,000"], format)
+            XCTAssertEqual(ends, ["00:00:02,000", "00:00:04,000", "00:00:06,500"], format)
+        }
+
+        let vtt = try XCTUnwrap(created.first { path in path.hasSuffix(".vtt") })
+        let vttText = try String(contentsOf: URL(fileURLWithPath: vtt), encoding: .utf8)
+        XCTAssertTrue(vttText.contains("A &amp; &lt;b&gt; C"))
+    }
+
+    /// прогон очереди: отметки ролей принадлежат показанному файлу, у соседней серии они свои
+    @MainActor
+    func testExportQueueUsesOwnRolesForEachFile() async throws {
+        let input = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: input) }
+        let output = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: output) }
+        let first = input.appendingPathComponent("first.srt")
+        let second = input.appendingPathComponent("second.srt")
+        try Data(makeSrtBody(roles: ["Анна", "Борис"]).utf8).write(to: first)
+        try Data(makeSrtBody(roles: ["Виктор", "Галина"]).utf8).write(to: second)
+
+        let model = ProcessingModel()
+        await model.enqueue(paths: [first.path, second.path], language: .ru)
+        XCTAssertEqual(model.queue.count, 2)
+        XCTAssertEqual(model.selectedFile?.name, "first.srt")
+
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: false, exportDocx: false,
+            srtFullWithRoles: false, srtSeparateFiles: true, srtSeparateWithRoles: false,
+            selectedRoles: ["Анна"], roleHighlights: [:]
+        )
+        let run = await model.exportQueue(outputFolder: output.path, settings: settings, language: .ru)
+        let outcome = try XCTUnwrap(run)
+
+        XCTAssertEqual(outcome.failed, 0)
+        // у показанного файла отмечена одна роль из двух, соседнему идут все его собственные
+        let names = Set(outcome.created.map { path in URL(fileURLWithPath: path).lastPathComponent })
+        XCTAssertEqual(names, ["first [Анна].srt", "second [Виктор].srt", "second [Галина].srt"])
+        XCTAssertEqual(model.queue.first?.state, QueueItemState.done(1))
+        XCTAssertEqual(model.queue.last?.state, QueueItemState.done(2))
+        for path in outcome.created {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: path), path)
+        }
+    }
+
+    /// на этой проверке держится правило «не создавать папку выгрузки»: пропущенный сюда путь
+    /// означает файлы неизвестно где или сбой посреди прогона
+    func testOutputFolderRejectsUnusablePaths() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("plain.txt")
+        try Data("текст".utf8).write(to: file)
+        let readOnly = dir.appendingPathComponent("readonly")
+        try FileManager.default.createDirectory(at: readOnly, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: readOnly.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: readOnly.path) }
+
+        XCTAssertTrue(OutputFolder.isUsable(dir.path))
+        XCTAssertFalse(OutputFolder.isUsable("Documents/выгрузка"))
+        XCTAssertFalse(OutputFolder.isUsable(dir.appendingPathComponent("нет").path))
+        XCTAssertFalse(OutputFolder.isUsable(file.path))
+        XCTAssertFalse(OutputFolder.isUsable(readOnly.path))
+    }
+
+    /// настоящий сбой посреди прогона, а не собранная руками ошибка: SRT уже на диске, а на месте
+    /// будущего docx лежит битая ссылка. существующей она не считается, поэтому аллокатор выдаёт
+    /// именно это имя, а запись по нему не проходит
+    func testPartialExportKeepsFilesWrittenBeforeFailure() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let subtitle = makeSubtitle()
+        try FileManager.default.createSymbolicLink(
+            atPath: dir.appendingPathComponent("sample.docx").path,
+            withDestinationPath: dir.appendingPathComponent("нет-такой-папки/sample.docx").path
+        )
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: false, exportDocx: true,
+            srtFullWithRoles: false, srtSeparateFiles: false, srtSeparateWithRoles: false, selectedRoles: [], roleHighlights: [:]
+        )
+
+        XCTAssertThrowsError(
+            try SubtitleExporter.export(
+                subtitle: subtitle, outputFolder: dir.path, settings: settings,
+                digest: SubtitleDigest(subtitle: subtitle, language: .ru), language: .ru)
+        ) { error in
+            guard let partial = error as? PartialExportError else {
+                XCTFail("ожидалась PartialExportError, пришла \(error)")
+                return
+            }
+            let names = partial.created.map { path in URL(fileURLWithPath: path).lastPathComponent }
+            XCTAssertEqual(names, ["sample [FULL].srt"])
+            XCTAssertTrue(FileManager.default.fileExists(atPath: partial.created.first ?? ""))
+        }
+    }
+
+    /// объём: пять тысяч реплик проходят импорт и все четыре формата одним прогоном
+    func testLargeFileExportsEveryFormat() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let count = 5000
+        var body = ""
+        for index in 0..<count {
+            let start = TimeInterval(index * 2)
+            let times = "\(TimeTools.formatSrt(start)) --> \(TimeTools.formatSrt(start + 1))"
+            let role = index.isMultiple(of: 2) ? "Анна" : "Борис"
+            body += "\(index + 1)\n\(times)\n[\(role)] строка \(index)\n\n"
+        }
+        let source = dir.appendingPathComponent("volume.srt")
+        try Data(body.utf8).write(to: source)
+
+        let imported = try SubtitleImporter.importFile(path: source.path, language: .ru)
+        XCTAssertEqual(imported.lines.count, count)
+        XCTAssertEqual(imported.skippedBlocks, 0)
+
+        let settings = ExportSettings(
+            exportAss: true, exportSrt: true, exportVtt: true, exportDocx: true,
+            srtFullWithRoles: false, srtSeparateFiles: false, srtSeparateWithRoles: false, selectedRoles: [], roleHighlights: [:]
+        )
+        let created = try SubtitleExporter.export(
+            subtitle: imported, outputFolder: dir.path, settings: settings,
+            digest: SubtitleDigest(subtitle: imported, language: .ru), language: .ru)
+
+        XCTAssertEqual(created.count, 4)
+        for path in created {
+            let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int ?? 0
+            XCTAssertGreaterThan(size, 0, path)
+        }
+    }
+
+    /// файл больше предела и каталог с расширением субтитров отвергаются до чтения:
+    /// иначе разбор упирается в память, а каталог доходит до декодера
+    func testImportRejectsOversizedAndNonRegularFile() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let big = dir.appendingPathComponent("big.srt")
+        XCTAssertTrue(FileManager.default.createFile(atPath: big.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: big)
+        // разреженный файл: нужен только его размер, а не содержимое
+        try handle.truncate(atOffset: AppLimits.maxSubtitleFileBytes + 1)
+        try handle.close()
+
+        XCTAssertThrowsError(try SubtitleImporter.importFile(path: big.path, language: .ru)) { error in
+            let message = L.describe(error, .ru)
+            XCTAssertTrue(message.contains("слишком большой"), message)
+            XCTAssertTrue(message.contains(L.fileSize(AppLimits.maxSubtitleFileBytes, .ru)), message)
+        }
+
+        let folder = dir.appendingPathComponent("папка.srt")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try SubtitleImporter.importFile(path: folder.path, language: .ru)) { error in
+            XCTAssertTrue(L.describe(error, .ru).contains("обычным файлом"))
+        }
+    }
+
+    /// текст раскодирован до разбора XML, а объявление кодировки в прологе осталось прежним:
+    /// libxml2 прочитал бы байты UTF-8 как windows-1251 и выдал вместо ролей кракозябры
+    func testSrpInWindows1251KeepsRoles() throws {
+        let body = """
+            <?xml version="1.0" encoding="windows-1251"?>
+            <Root>
+              <DocumentElement>
+                <Character>Анна</Character>
+                <Sex>Ж</Sex>
+                <BeginTime>00:00:01,000</BeginTime>
+                <EndTime>00:00:02,000</EndTime>
+                <Text>Привет</Text>
+              </DocumentElement>
+            </Root>
+            """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).srp")
+        try XCTUnwrap(body.data(using: cp1251)).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
+
+        XCTAssertEqual(imported.lines.first?.roles, ["Анна"])
+        XCTAssertEqual(imported.lines.first?.sex, .female)
+        XCTAssertEqual(imported.lines.first?.text, "Привет")
+    }
+
+    /// внутренняя сущность разворачивается уже в конструкторе XMLDocument, поэтому DOCTYPE
+    /// ищется в тексте: проверка после разбора опоздала бы на целую бомбу
+    func testSrpRejectsDoctypeBeforeParsing() throws {
+        let body = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <!DOCTYPE Root [ <!ENTITY grow "РАЗВЁРНУТО"> ]>
+            <Root>
+              <DocumentElement>
+                <Character>&grow;</Character>
+                <Sex>М</Sex>
+                <BeginTime>00:00:01,000</BeginTime>
+                <EndTime>00:00:02,000</EndTime>
+                <Text>текст</Text>
+              </DocumentElement>
+            </Root>
+            """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).srp")
+        try Data(body.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        XCTAssertThrowsError(try SubtitleImporter.importFile(path: url.path, language: .ru)) { error in
+            let message = L.describe(error, .ru)
+            XCTAssertTrue(message.contains("DTD"), message)
+            XCTAssertFalse(message.contains("РАЗВЁРНУТО"), message)
+        }
+    }
+
+    /// пустая строка с пробелом между блоками SRT: без нормализации две реплики склеивались в одну
+    func testSpacedBlankLineSplitsSrtBlocks() throws {
+        let body = "1\n00:00:01,000 --> 00:00:02,000\n[Анна] раз\n \n2\n00:00:03,000 --> 00:00:04,000\n[Борис] два\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avt_\(UUID().uuidString).srt")
+        try Data(body.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let imported = try SubtitleImporter.importFile(path: url.path, language: .ru)
+
+        XCTAssertEqual(imported.lines.count, 2)
+        XCTAssertEqual(imported.lines.map { line in line.roles }, [["Анна"], ["Борис"]])
+        XCTAssertEqual(imported.lines.map { line in line.text }, ["раз", "два"])
+    }
+
+    /// слой, отступы и эффект принадлежат исходной строке Dialogue: обнулённые, они теряют
+    /// надписи и караоке
+    func testAssExportKeepsLayerMarginsAndEffect() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let body = """
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 3,0:00:01.00,0:00:02.00,Default,Анна,10,20,30,Karaoke,Привет
+            """
+        let source = dir.appendingPathComponent("marks.ass")
+        try Data(body.utf8).write(to: source)
+
+        let imported = try SubtitleImporter.importFile(path: source.path, language: .ru)
+        let created = try exportAssOnly(imported, to: dir.path)
+        let text = try String(contentsOf: URL(fileURLWithPath: created), encoding: .utf8)
+
+        XCTAssertTrue(text.contains("Dialogue: 3,0:00:01.00,0:00:02.00,Default,Анна,10,20,30,Karaoke,Привет"))
+        let back = try SubtitleImporter.importFile(path: created, language: .ru)
+        XCTAssertEqual(back.lines.first?.layer, 3)
+        XCTAssertEqual(back.lines.first?.marginL, 10)
+        XCTAssertEqual(back.lines.first?.marginR, 20)
+        XCTAssertEqual(back.lines.first?.marginV, 30)
+        XCTAssertEqual(back.lines.first?.effect, "Karaoke")
+    }
+
+    /// длинная база и длинная роль вместе: в предел файловой системы обязано уложиться
+    /// собранное имя целиком, а не одна его половина
+    func testLongBaseAndRoleFitFileNameLimit() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let longRole = String(repeating: "Длиннаяроль", count: 30)
+        let subtitle = ImportedSubtitle(
+            baseName: String(repeating: "Длиннаябаза", count: 30),
+            sourcePath: "",
+            sourceType: .srt,
+            lines: [SubtitleLine(id: UUID(), start: 1, end: 2, roles: [longRole], text: "текст", style: "", effect: "", sex: .unknown)]
+        )
+        let settings = ExportSettings(
+            exportAss: false, exportSrt: true, exportVtt: false, exportDocx: false,
+            srtFullWithRoles: false, srtSeparateFiles: true, srtSeparateWithRoles: false, selectedRoles: [longRole], roleHighlights: [:]
+        )
+
+        let created = try SubtitleExporter.export(
+            subtitle: subtitle, outputFolder: dir.path, settings: settings,
+            digest: SubtitleDigest(subtitle: subtitle, language: .ru), language: .ru)
+
+        let name = try XCTUnwrap(created.first.map { path in URL(fileURLWithPath: path).lastPathComponent })
+        XCTAssertLessThanOrEqual(name.utf8.count, 255)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(created.first)))
+    }
+
+    /// файл SRT с одной репликой на каждую роль
+    private func makeSrtBody(roles: [String]) -> String {
+        var body = ""
+        for (index, role) in roles.enumerated() {
+            let start = TimeInterval(index * 2)
+            let times = "\(TimeTools.formatSrt(start)) --> \(TimeTools.formatSrt(start + 1))"
+            body += "\(index + 1)\n\(times)\n[\(role)] строка\n\n"
+        }
+        return body
+    }
+
+    /// экспорт одного только ASS через общий путь программы: отдельной функции ради тестов
+    /// у экспортёра больше нет, и проверять надо ровно то, чем пользуется приложение
+    private func exportAssOnly(_ subtitle: ImportedSubtitle, to folder: String) throws -> String {
+        let settings = ExportSettings(
+            exportAss: true,
+            exportSrt: false,
+            exportVtt: false,
+            exportDocx: false,
+            srtFullWithRoles: false,
+            srtSeparateFiles: false,
+            srtSeparateWithRoles: false,
+            selectedRoles: [],
+            roleHighlights: [:]
+        )
+        let created = try SubtitleExporter.export(
+            subtitle: subtitle,
+            outputFolder: folder,
+            settings: settings,
+            digest: SubtitleDigest(subtitle: subtitle, language: .ru),
+            language: .ru
+        )
+        return try XCTUnwrap(created.first)
+    }
+
     private func makeSubtitle() -> ImportedSubtitle {
         ImportedSubtitle(
             baseName: "sample",
@@ -744,7 +1087,7 @@ final class CoreTests: XCTestCase {
         )
     }
 
-    /// запускает утилиту и отдаёт её stdout
+    /// запускает утилиту и отдаёт её stdout; ненулевой код возврата это ошибка теста
     private func run(_ tool: String, _ arguments: [String]) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
@@ -755,6 +1098,9 @@ final class CoreTests: XCTestCase {
         try process.run()
         let output = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw ToolError(tool: tool, status: process.terminationStatus)
+        }
         return output
     }
 
