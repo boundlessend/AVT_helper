@@ -19,10 +19,14 @@ jobs:
     name: Build macOS app (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    # macos-14 в матрице нет намеренно: на этом образе тулчейн по умолчанию Swift 5.10,
+    # где нет ни swift format, ни языкового режима 6, и падает он не на коде, а на самом себе.
+    # macos-latest сторожит будущий образ и не валит прогон, пока тот не станет основным
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        os: [macos-15, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
