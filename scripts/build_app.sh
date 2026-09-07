@@ -49,6 +49,28 @@ chmod +x "${MACOS_DIR}/${APP_NAME}"
 # ресурсный бандл SwiftPM с переводами: без него в интерфейсе останутся одни ключи
 cp -R "${ROOT_DIR}/.build/release/${APP_NAME}_${APP_NAME}.bundle" "${RESOURCES_DIR}/"
 
+# имена типов документов видны в Finder, в колонке «Вид» и в меню «Открыть с помощью».
+# локализуются они через InfoPlist.strings, где ключом служит строка из самого Info.plist
+for LANG_DIR in ru en; do
+  mkdir -p "${RESOURCES_DIR}/${LANG_DIR}.lproj"
+done
+
+cat > "${RESOURCES_DIR}/ru.lproj/InfoPlist.strings" <<'STRINGS'
+"Subtitle file" = "Файл субтитров";
+"Advanced SubStation Alpha subtitles" = "Субтитры Advanced SubStation Alpha";
+"SubStation Alpha subtitles" = "Субтитры SubStation Alpha";
+"SubRip subtitles" = "Субтитры SubRip";
+"SRP dubbing script" = "Монтажный лист SRP";
+STRINGS
+
+cat > "${RESOURCES_DIR}/en.lproj/InfoPlist.strings" <<'STRINGS'
+"Subtitle file" = "Subtitle file";
+"Advanced SubStation Alpha subtitles" = "Advanced SubStation Alpha subtitles";
+"SubStation Alpha subtitles" = "SubStation Alpha subtitles";
+"SubRip subtitles" = "SubRip subtitles";
+"SRP dubbing script" = "SRP dubbing script";
+STRINGS
+
 # иконка собирается из одного исходника: хранить десять срезов в репозитории незачем
 rm -rf "${ICONSET_DIR}"
 mkdir -p "${ICONSET_DIR}"
@@ -100,6 +122,8 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <true/>
     <key>NSSupportsSuddenTermination</key>
     <true/>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>ru</string>
     <key>CFBundleLocalizations</key>
     <array>
       <string>ru</string>
