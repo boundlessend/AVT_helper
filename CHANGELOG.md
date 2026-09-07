@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-01
+
 ### Fixed
 
 - **A timecode outside the range of an integer killed the app.** Sixteen digits in the hours field overflowed on the way to milliseconds and took the process with them, while a negative component was quietly clamped to zero instead of being refused. Every component is checked before it is converted, and a cue whose end comes before its start is dropped like any other damaged block.
